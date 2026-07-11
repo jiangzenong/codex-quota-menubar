@@ -42,19 +42,25 @@ struct CodexQuotaMenuBarApp: App {
         launch.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(.separator()); menu.addItem(withTitle: "退出", action: #selector(quit), keyEquivalent: "q")
         menu.items.forEach { $0.target = self }
-        if let button = statusItem.button {
-            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
-        }
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil
     }
     @objc private func refresh() { model.refresh() }
     @objc private func togglePanel() {
         if panel?.isVisible == true { panel?.orderOut(nil); return }
         if panel == nil {
             panel = NSPanel(contentRect: .init(x: 0, y: 0, width: 330, height: 300), styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
-            panel?.title = "Codex 额度"; panel?.level = .floating; panel?.isMovableByWindowBackground = true
+            panel?.title = "Codex 额度"
+            panel?.level = .floating
+            panel?.hidesOnDeactivate = false
+            panel?.isMovableByWindowBackground = true
             panel?.contentView = NSHostingView(rootView: DetailView(model: model, close: { [weak self] in self?.panel?.orderOut(nil) }))
+            panel?.center()
         }
-        model.refresh(); panel?.makeKeyAndOrderFront(nil)
+        model.refresh()
+        NSApp.activate(ignoringOtherApps: true)
+        panel?.makeKeyAndOrderFront(nil)
     }
     @objc private func openUsage() { NSWorkspace.shared.open(URL(string: "https://chatgpt.com/codex/settings/usage")!) }
     @objc private func toggleLaunchAtLogin() {
