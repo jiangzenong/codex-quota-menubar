@@ -53,3 +53,12 @@ public enum QuotaFormatting {
         return "5h \(Int(fiveHour.rounded()))% · W \(weekly)"
     }
 }
+
+public enum StatusClickRoute: Equatable {
+    case detailWindow
+    case contextMenu
+
+    public static func forRightMouseUp(_ isRightMouseUp: Bool) -> Self {
+        isRightMouseUp ? .contextMenu : .detailWindow
+    }
+}

@@ -23,14 +23,17 @@ struct CodexQuotaMenuBarApp: App {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.target = self; statusItem.button?.action = #selector(statusClicked)
+        statusItem.button?.target = self
+        statusItem.button?.action = #selector(statusClicked)
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         model.$snapshot.receive(on: RunLoop.main).sink { [weak self] in self?.statusItem.button?.title = QuotaFormatting.menuTitle(for: $0) }.store(in: &subscriptions)
         model.refresh(); Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.model.refresh() }
         }
     }
     @objc private func statusClicked() {
-        if NSApp.currentEvent?.type != .rightMouseUp { model.refresh(); togglePanel(); return }
+        let route = StatusClickRoute.forRightMouseUp(NSApp.currentEvent?.type == .rightMouseUp)
+        if route == .detailWindow { model.refresh(); togglePanel(); return }
         let menu = NSMenu()
         menu.addItem(withTitle: "立即刷新", action: #selector(refresh), keyEquivalent: "")
         menu.addItem(withTitle: panel?.isVisible == true ? "隐藏详情窗口" : "显示详情窗口", action: #selector(togglePanel), keyEquivalent: "")
@@ -38,7 +41,10 @@ struct CodexQuotaMenuBarApp: App {
         let launch = menu.addItem(withTitle: "开机启动", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launch.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(.separator()); menu.addItem(withTitle: "退出", action: #selector(quit), keyEquivalent: "q")
-        menu.items.forEach { $0.target = self }; statusItem.menu = menu; statusItem.button?.performClick(nil); statusItem.menu = nil
+        menu.items.forEach { $0.target = self }
+        if let button = statusItem.button {
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
+        }
     }
     @objc private func refresh() { model.refresh() }
     @objc private func togglePanel() {
