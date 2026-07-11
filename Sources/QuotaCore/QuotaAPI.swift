@@ -19,6 +19,22 @@ public enum QuotaAPI {
         return .init(plan: plan?.uppercased(), fiveHour: fiveHour, weekly: weekly, resetCredits: nil, resetCreditExpirations: [], refreshedAt: now, status: .ok, message: nil)
     }
 
+    public static func fetch() async -> QuotaSnapshot {
+        do {
+            let credentials = try CodexAuth.load()
+            var request = URLRequest(url: usageURL)
+            request.setValue("Bearer \(credentials.accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("Codex Desktop", forHTTPHeaderField: "originator")
+            request.setValue("CODEX", forHTTPHeaderField: "OAI-Product-Sku")
+            if let accountID = credentials.accountID { request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id") }
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let response = response as? HTTPURLResponse else { return .unavailable(message: "Quota service is unavailable.") }
+            if response.statusCode == 401 || response.statusCode == 403 { return .init(plan: nil, fiveHour: nil, weekly: nil, resetCredits: nil, resetCreditExpirations: [], refreshedAt: .now, status: .signedOut, message: "Codex login expired. Please sign in again.") }
+            guard (200..<300).contains(response.statusCode) else { return .unavailable(message: "Quota service is temporarily unavailable.") }
+            return try parseUsage(data)
+        } catch { return .unavailable(message: "Please sign in to Codex Desktop, then refresh.") }
+    }
+
     private static func window(_ value: Any?, expected: TimeInterval) -> QuotaWindow? {
         guard let value = value as? [String: Any] else { return nil }
         let used = number(value["used_percent"] ?? value["usedPercent"])
