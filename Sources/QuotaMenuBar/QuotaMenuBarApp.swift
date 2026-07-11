@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import ServiceManagement
 import SwiftUI
 import QuotaCore
 
@@ -34,6 +35,8 @@ struct CodexQuotaMenuBarApp: App {
         menu.addItem(withTitle: "立即刷新", action: #selector(refresh), keyEquivalent: "")
         menu.addItem(withTitle: panel?.isVisible == true ? "隐藏详情窗口" : "显示详情窗口", action: #selector(togglePanel), keyEquivalent: "")
         menu.addItem(withTitle: "打开 Codex 用量", action: #selector(openUsage), keyEquivalent: "")
+        let launch = menu.addItem(withTitle: "开机启动", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        launch.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(.separator()); menu.addItem(withTitle: "退出", action: #selector(quit), keyEquivalent: "q")
         menu.items.forEach { $0.target = self }; statusItem.menu = menu; statusItem.button?.performClick(nil); statusItem.menu = nil
     }
@@ -48,6 +51,12 @@ struct CodexQuotaMenuBarApp: App {
         model.refresh(); panel?.makeKeyAndOrderFront(nil)
     }
     @objc private func openUsage() { NSWorkspace.shared.open(URL(string: "https://chatgpt.com/codex/settings/usage")!) }
+    @objc private func toggleLaunchAtLogin() {
+        do {
+            if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
+            else { try SMAppService.mainApp.register() }
+        } catch { NSSound.beep() }
+    }
     @objc private func quit() { NSApp.terminate(nil) }
 }
 
