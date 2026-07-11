@@ -22,3 +22,5 @@ open dist/CodexQuotaMenuBar.app
 ```
 
 构建产物位于 `dist/CodexQuotaMenuBar.app`，是本地未签名应用。应用只读取 `~/.codex/auth.json`（或 `CODEX_HOME/auth.json`），仅向 `chatgpt.com` 的 Codex 额度端点发送现有登录 token；不会保存 token、聊天内容或原始接口响应。
+
+详情面板支持动态配色和悬浮球模式。官方使用分析仅在服务端实际返回数据时显示；没有真实数据时会显示不可用状态并可打开官方 Usage 页面。

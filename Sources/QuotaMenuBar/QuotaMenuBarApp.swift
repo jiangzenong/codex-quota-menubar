@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import Charts
 import ServiceManagement
 import SwiftUI
 import QuotaCore
@@ -12,7 +13,10 @@ struct CodexQuotaMenuBarApp: App {
 
 @MainActor final class QuotaModel: ObservableObject {
     @Published var snapshot: QuotaSnapshot?
-    func refresh() { Task { self.snapshot = await QuotaAPI.fetch() } }
+    @Published var analytics = UsageAnalyticsSnapshot.unavailable
+    @Published var isOrb = false
+    @Published var english = false
+    func refresh() { Task { self.snapshot = await QuotaAPI.fetch(); self.analytics = await QuotaAPI.fetchOfficialAnalytics() } }
 }
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -55,7 +59,7 @@ struct CodexQuotaMenuBarApp: App {
             panel?.level = .floating
             panel?.hidesOnDeactivate = false
             panel?.isMovableByWindowBackground = true
-            panel?.contentView = NSHostingView(rootView: DetailView(model: model, close: { [weak self] in self?.panel?.orderOut(nil) }))
+            panel?.contentView = NSHostingView(rootView: DetailView(model: model, close: { [weak self] in self?.panel?.orderOut(nil) }, openUsage: { [weak self] in self?.openUsage() }))
             panel?.center()
         }
         model.refresh()
@@ -75,15 +79,23 @@ struct CodexQuotaMenuBarApp: App {
 struct DetailView: View {
     @ObservedObject var model: QuotaModel
     let close: () -> Void
+    let openUsage: () -> Void
     var body: some View {
+        let color = accent
         VStack(alignment: .leading, spacing: 14) {
-            HStack { Text(model.snapshot?.plan ?? "CODEX").font(.headline); Spacer(); Button("刷新") { model.refresh() }; Button("关闭", action: close) }
+            HStack { Text(model.snapshot?.plan ?? "CODEX").font(.headline); Spacer(); Button(model.english ? "中文" : "EN") { model.english.toggle() }; Button("●") { model.isOrb.toggle() }; Button("×", action: close) }
+            if model.isOrb { Text(model.snapshot?.fiveHour.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—").font(.system(size: 42, weight: .bold, design: .rounded)).frame(maxWidth: .infinity).padding(28).background(Circle().fill(color.gradient)).onTapGesture { model.isOrb = false } }
+            else {
             row("5 小时额度", model.snapshot?.fiveHour); row("本周额度", model.snapshot?.weekly)
+            if model.analytics.isOfficial { Chart(model.analytics.events, id: \.date) { event in ForEach(event.values.keys.sorted(), id: \.self) { key in BarMark(x: .value("Date", event.date), y: .value("Usage", event.values[key] ?? 0)).foregroundStyle(by: .value("Surface", key)) } }.frame(height: 120) }
+            else { Button(model.english ? "Official analytics unavailable — Open Usage" : "官方分析数据暂不可用 — 打开 Usage", action: openUsage).font(.caption) }
+            }
             if let credits = model.snapshot?.resetCredits { Text("可用重置额度：\(credits)") }
             Divider(); Text(model.snapshot?.message ?? "上次刷新：\(model.snapshot?.refreshedAt.formatted(date: .omitted, time: .shortened) ?? "—")").font(.caption).foregroundStyle(.secondary)
-        }.padding(18).frame(width: 330)
+        }.padding(18).frame(width: 330).background(.ultraThinMaterial).tint(color)
     }
     private func row(_ label: String, _ value: QuotaWindow?) -> some View {
         VStack(alignment: .leading, spacing: 6) { HStack { Text(label); Spacer(); Text(value.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—") }; ProgressView(value: value?.remainingPercent ?? 0, total: 100); Text(value?.resetsAt.map { "重置：\($0.formatted(date: .abbreviated, time: .shortened))" } ?? "额度信息不可用").font(.caption).foregroundStyle(.secondary) }
     }
+    private var accent: Color { let value = model.snapshot?.fiveHour?.remainingPercent ?? 0; return value < 10 ? .orange : value < 50 ? .yellow : .cyan }
 }

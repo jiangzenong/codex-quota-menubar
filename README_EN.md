@@ -22,3 +22,5 @@ open dist/CodexQuotaMenuBar.app
 ```
 
 The unsigned local app is created at `dist/CodexQuotaMenuBar.app`. It reads only `~/.codex/auth.json` (or `CODEX_HOME/auth.json`) and sends the existing login token only to Codex quota endpoints on `chatgpt.com`. It does not save tokens, chat content, or raw API responses.
+
+The detail panel supports dynamic colors and floating-orb mode. Official usage analytics render only when the service returns real records; otherwise the app shows an unavailable state and links to the official Usage page.

@@ -29,4 +29,9 @@ final class QuotaCoreTests: XCTestCase {
         XCTAssertEqual(StatusClickRoute.forRightMouseUp(true), .contextMenu)
         XCTAssertEqual(StatusClickRoute.forRightMouseUp(false), .detailWindow)
     }
+
+    func testOfficialAnalyticsRejectsRowsWithoutDateAndValues() {
+        XCTAssertNil(OfficialUsageEvent.parse(["date": "2026-07-12"]))
+        XCTAssertNil(OfficialUsageEvent.parse(["product_surface_usage_values": ["desktop_app": 20]]))
+    }
 }

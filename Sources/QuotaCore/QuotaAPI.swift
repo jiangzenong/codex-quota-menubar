@@ -8,6 +8,7 @@ public struct Credentials: Sendable {
 public enum QuotaAPI {
     public static let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
     public static let creditsURL = URL(string: "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits")!
+    public static let analyticsURL = URL(string: "https://chatgpt.com/backend-api/wham/usage/credit-usage-events")!
 
     public static func parseUsage(_ data: Data, now: Date = .now) throws -> QuotaSnapshot {
         let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
@@ -33,6 +34,23 @@ public enum QuotaAPI {
             guard (200..<300).contains(response.statusCode) else { return .unavailable(message: "Quota service is temporarily unavailable.") }
             return try parseUsage(data)
         } catch { return .unavailable(message: "Please sign in to Codex Desktop, then refresh.") }
+    }
+
+    public static func fetchOfficialAnalytics() async -> UsageAnalyticsSnapshot {
+        do {
+            let credentials = try CodexAuth.load()
+            var request = URLRequest(url: analyticsURL)
+            request.setValue("Bearer \(credentials.accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("Codex Desktop", forHTTPHeaderField: "originator")
+            request.setValue("CODEX", forHTTPHeaderField: "OAI-Product-Sku")
+            if let accountID = credentials.accountID { request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id") }
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
+                  let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let rows = root["data"] as? [[String: Any]] else { return .unavailable }
+            let events = rows.compactMap(OfficialUsageEvent.parse)
+            return events.isEmpty ? .unavailable : .init(events: events, isOfficial: true)
+        } catch { return .unavailable }
     }
 
     private static func window(_ value: Any?, expected: TimeInterval) -> QuotaWindow? {
