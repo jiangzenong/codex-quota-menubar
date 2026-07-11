@@ -1,6 +1,6 @@
-# Codex Quota Menu Bar / Codex 额度菜单栏
+# Codex 额度菜单栏
 
-## 中文
+[English](README_EN.md)
 
 macOS 原生菜单栏工具，实时显示 Codex 的 5 小时与本周剩余额度。
 
@@ -22,26 +22,3 @@ open dist/CodexQuotaMenuBar.app
 ```
 
 构建产物位于 `dist/CodexQuotaMenuBar.app`，是本地未签名应用。应用只读取 `~/.codex/auth.json`（或 `CODEX_HOME/auth.json`），仅向 `chatgpt.com` 的 Codex 额度端点发送现有登录 token；不会保存 token、聊天内容或原始接口响应。
-
-## English
-
-A native macOS menu bar app that shows the remaining Codex five-hour and weekly quota in real time.
-
-### Features
-
-- Menu bar display: `5h 72% · W 54%`
-- Left-click to refresh and open the detail window
-- Right-click menu: refresh now, show/hide details, open Codex Usage, launch at login, and quit
-- Detail window with plan, quota progress, reset times, and reset credits when returned by the service
-- Draggable, always-on-top detail window
-
-### Build and run
-
-Sign in to Codex Desktop or the Codex CLI before first use.
-
-```bash
-./Scripts/build-app.sh
-open dist/CodexQuotaMenuBar.app
-```
-
-The unsigned local app is created at `dist/CodexQuotaMenuBar.app`. It reads only `~/.codex/auth.json` (or `CODEX_HOME/auth.json`) and sends the existing login token only to Codex quota endpoints on `chatgpt.com`. It does not save tokens, chat content, or raw API responses.
