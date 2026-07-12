@@ -55,11 +55,13 @@ struct CodexQuotaMenuBarApp: App {
     @objc private func togglePanel() {
         if panel?.isVisible == true { panel?.orderOut(nil); return }
         if panel == nil {
-            panel = NSPanel(contentRect: .init(x: 0, y: 0, width: 640, height: 520), styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
-            panel?.title = "Codex 额度"
+            panel = NSPanel(contentRect: .init(x: 0, y: 0, width: 640, height: 520), styleMask: [.borderless, .fullSizeContentView], backing: .buffered, defer: false)
             panel?.level = .floating
             panel?.hidesOnDeactivate = false
             panel?.isMovableByWindowBackground = true
+            panel?.isOpaque = false
+            panel?.backgroundColor = .clear
+            panel?.hasShadow = false
             panel?.contentView = NSHostingView(rootView: DetailView(model: model, close: { [weak self] in self?.panel?.orderOut(nil) }, openUsage: { [weak self] in self?.openUsage() }))
             panel?.center()
         }
@@ -71,9 +73,9 @@ struct CodexQuotaMenuBarApp: App {
         guard let panel else { return }
         let size = isOrb ? NSSize(width: 164, height: 164) : NSSize(width: 640, height: 520)
         let origin = NSPoint(x: panel.frame.midX - size.width / 2, y: panel.frame.midY - size.height / 2)
-        panel.styleMask = isOrb ? [.borderless, .fullSizeContentView] : [.titled, .closable, .fullSizeContentView]
-        panel.isOpaque = !isOrb
-        panel.backgroundColor = isOrb ? .clear : .windowBackgroundColor
+        panel.styleMask = [.borderless, .fullSizeContentView]
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
         panel.setFrame(NSRect(origin: origin, size: size), display: true, animate: true)
     }
     @objc private func openUsage() { NSWorkspace.shared.open(URL(string: "https://chatgpt.com/codex/settings/usage")!) }
@@ -91,18 +93,25 @@ struct DetailView: View {
     let close: () -> Void
     let openUsage: () -> Void
     var body: some View {
-        let color = accent
-        VStack(alignment: .leading, spacing: 16) {
-            HStack { Text("CODEX · \(model.snapshot?.plan ?? "PRO")").font(.system(size: 15, weight: .semibold, design: .rounded)); Spacer(); Button(model.english ? "中文" : "EN") { model.english.toggle() }; Button("●") { model.isOrb.toggle() }; Button("×", action: close) }
-            if model.isOrb { Text(model.snapshot?.fiveHour.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—").font(.system(size: 42, weight: .bold, design: .rounded)).frame(width: 150, height: 150).background(Circle().fill(.black.opacity(0.88)).overlay(Circle().stroke(AngularGradient(colors: [.cyan, .blue, .purple, .cyan], center: .center), lineWidth: 7)).shadow(color: color.opacity(0.8), radius: 18)).onTapGesture { model.isOrb = false } }
-            else {
-            HStack(spacing: 0) { topMetric("五小时剩余", value: model.snapshot?.fiveHour.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—", caption: "5h", color: color); Divider(); topMetric("距离下次重置", value: model.snapshot?.fiveHour?.resetsAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "—", caption: "", color: .primary); Divider(); topMetric("本周剩余", value: model.snapshot?.weekly.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—", caption: "", color: .primary) }.padding(.vertical, 10)
-            if model.analytics.isOfficial { Chart(model.analytics.events, id: \.date) { event in ForEach(event.values.keys.sorted(), id: \.self) { key in BarMark(x: .value("Date", event.date), y: .value("Usage", event.values[key] ?? 0)).foregroundStyle(Color(red: 0.91, green: 0.16, blue: 0.16)) } }.frame(height: 120) }
-            else { Button(model.english ? "Official analytics unavailable — Open Usage" : "官方分析数据暂不可用 — 打开 Usage", action: openUsage).font(.caption) }
-            }
-            if let credits = model.snapshot?.resetCredits { Text("可用重置额度：\(credits)") }
-            Divider(); HStack { Text("数据来自官方").font(.caption).foregroundStyle(.secondary); Spacer(); Button("↻") { model.refresh() }.buttonStyle(.plain) }
-        }.padding(model.isOrb ? 7 : 24).frame(width: model.isOrb ? 164 : 640).background(model.isOrb ? AnyShapeStyle(.clear) : AnyShapeStyle(.ultraThinMaterial)).tint(color)
+        Group { if model.isOrb { orb } else { dashboard } }
+    }
+    private var dashboard: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 26).fill(.black.opacity(0.86))
+            RoundedRectangle(cornerRadius: 26).stroke(AngularGradient(colors: [.cyan, .blue, .purple, .cyan], center: .center), lineWidth: 1.5)
+            VStack(spacing: 20) {
+                HStack { Text("CODEX · \(model.snapshot?.plan ?? "PRO")").font(.system(size: 22, weight: .semibold, design: .rounded)); Spacer(); Button(model.english ? "中文" : "EN") { model.english.toggle() }; Button("●") { model.isOrb = true }; Button("×", action: close) }.buttonStyle(.bordered).padding(.top, 4)
+                HStack(spacing: 0) { topMetric("五小时剩余", value: model.snapshot?.fiveHour.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—", caption: "5h", color: accent); Divider().frame(height: 110); topMetric("距离下次重置", value: model.snapshot?.fiveHour?.resetsAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "—", caption: "", color: .white); Divider().frame(height: 110); topMetric("本周剩余", value: model.snapshot?.weekly.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—", caption: "", color: .white) }
+                chartSection
+                HStack { Text("数据来自官方").font(.caption).foregroundStyle(.secondary); Spacer(); Button("↻") { model.refresh() }.buttonStyle(.plain) }
+            }.padding(28)
+        }.frame(width: 640, height: 520).foregroundStyle(.white).shadow(color: accent.opacity(0.45), radius: 26)
+    }
+    private var orb: some View {
+        ZStack { Circle().fill(.black.opacity(0.9)); Circle().stroke(AngularGradient(colors: [.cyan, .blue, .purple, .cyan], center: .center), lineWidth: 8); VStack(spacing: 2) { Text(model.snapshot?.fiveHour.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—").font(.system(size: 44, weight: .bold, design: .rounded)); Text("5h").font(.caption).foregroundStyle(.secondary) } }.frame(width: 150, height: 150).foregroundStyle(.white).shadow(color: accent.opacity(0.9), radius: 22).onTapGesture { model.isOrb = false }
+    }
+    private var chartSection: some View {
+        VStack(alignment: .leading, spacing: 8) { Text("个人使用情况").font(.headline); if model.analytics.isOfficial { Chart(model.analytics.events, id: \.date) { event in ForEach(event.values.keys.sorted(), id: \.self) { key in BarMark(x: .value("Date", event.date), y: .value("Usage", event.values[key] ?? 0)).foregroundStyle(Color(red: 0.91, green: 0.16, blue: 0.16)) } }.frame(height: 160) } else { Button("官方分析数据暂不可用 — 打开 Usage", action: openUsage).buttonStyle(.bordered) .frame(maxWidth: .infinity, minHeight: 160) } }.frame(maxWidth: .infinity, alignment: .leading).padding(16).background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18))
     }
     private func topMetric(_ label: String, value: String, caption: String, color: Color) -> some View { VStack(spacing: 7) { Text(label).font(.caption).foregroundStyle(.secondary); Text(value).font(.system(size: 31, weight: .medium, design: .rounded)).foregroundStyle(color); if !caption.isEmpty { Text(caption).font(.caption).foregroundStyle(.secondary) } }.frame(maxWidth: .infinity) }
     private func row(_ label: String, _ value: QuotaWindow?) -> some View {
