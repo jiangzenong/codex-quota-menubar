@@ -4,7 +4,7 @@ A native macOS menu bar app for viewing your current Codex five-hour and weekly 
 
 ## How it works
 
-On launch, the app reads the existing local Codex sign-in state and requests quota data from Codex. It shows the result in the menu bar, for example: `5h 72% · W 54%`.
+On launch, the app reads the existing local Codex sign-in state and requests quota data from Codex. It shows the result in the menu bar, for example: `5h 72% · 7d 54%`.
 
 - Left-click the menu bar quota to refresh and open the detail panel.
 - Right-click it to refresh, show or hide the panel, use the floating orb, manage launch at login, or quit.
@@ -12,6 +12,13 @@ On launch, the app reads the existing local Codex sign-in state and requests quo
 - You can collapse the panel into a floating orb and click the orb to expand it again.
 
 The app doesn't ask for a separate username or password. Before first use, sign in to Codex Desktop or the Codex CLI.
+
+## Download
+
+Download the latest version from [Releases](https://github.com/jiangzenong/codex-quota-menubar/releases/latest). Cloning the repository and building locally aren't required.
+
+- Apple silicon Macs: `CodexQuotaMenuBar-macos-apple-silicon.zip`
+- Intel Macs: `CodexQuotaMenuBar-macos-intel.zip`
 
 ## Build and launch
 
