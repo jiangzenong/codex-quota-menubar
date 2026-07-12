@@ -82,18 +82,19 @@ struct DetailView: View {
     let openUsage: () -> Void
     var body: some View {
         let color = accent
-        VStack(alignment: .leading, spacing: 14) {
-            HStack { Text(model.snapshot?.plan ?? "CODEX").font(.headline); Spacer(); Button(model.english ? "中文" : "EN") { model.english.toggle() }; Button("●") { model.isOrb.toggle() }; Button("×", action: close) }
+        VStack(alignment: .leading, spacing: 16) {
+            HStack { Text("CODEX · \(model.snapshot?.plan ?? "PRO")").font(.system(size: 15, weight: .semibold, design: .rounded)); Spacer(); Button(model.english ? "中文" : "EN") { model.english.toggle() }; Button("●") { model.isOrb.toggle() }; Button("×", action: close) }
             if model.isOrb { Text(model.snapshot?.fiveHour.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—").font(.system(size: 42, weight: .bold, design: .rounded)).frame(maxWidth: .infinity).padding(28).background(Circle().fill(color.gradient)).onTapGesture { model.isOrb = false } }
             else {
-            row("5 小时额度", model.snapshot?.fiveHour); row("本周额度", model.snapshot?.weekly)
-            if model.analytics.isOfficial { Chart(model.analytics.events, id: \.date) { event in ForEach(event.values.keys.sorted(), id: \.self) { key in BarMark(x: .value("Date", event.date), y: .value("Usage", event.values[key] ?? 0)).foregroundStyle(by: .value("Surface", key)) } }.frame(height: 120) }
+            HStack(spacing: 0) { topMetric("五小时剩余", value: model.snapshot?.fiveHour.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—", caption: "5h", color: color); Divider(); topMetric("距离下次重置", value: model.snapshot?.fiveHour?.resetsAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "—", caption: "", color: .primary); Divider(); topMetric("本周剩余", value: model.snapshot?.weekly.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—", caption: "", color: .primary) }.padding(.vertical, 10)
+            if model.analytics.isOfficial { Chart(model.analytics.events, id: \.date) { event in ForEach(event.values.keys.sorted(), id: \.self) { key in BarMark(x: .value("Date", event.date), y: .value("Usage", event.values[key] ?? 0)).foregroundStyle(Color(red: 0.91, green: 0.16, blue: 0.16)) } }.frame(height: 120) }
             else { Button(model.english ? "Official analytics unavailable — Open Usage" : "官方分析数据暂不可用 — 打开 Usage", action: openUsage).font(.caption) }
             }
             if let credits = model.snapshot?.resetCredits { Text("可用重置额度：\(credits)") }
-            Divider(); Text(model.snapshot?.message ?? "上次刷新：\(model.snapshot?.refreshedAt.formatted(date: .omitted, time: .shortened) ?? "—")").font(.caption).foregroundStyle(.secondary)
+            Divider(); HStack { Text("数据来自官方").font(.caption).foregroundStyle(.secondary); Spacer(); Button("↻") { model.refresh() }.buttonStyle(.plain) }
         }.padding(18).frame(width: 330).background(.ultraThinMaterial).tint(color)
     }
+    private func topMetric(_ label: String, value: String, caption: String, color: Color) -> some View { VStack(spacing: 7) { Text(label).font(.caption).foregroundStyle(.secondary); Text(value).font(.system(size: 31, weight: .medium, design: .rounded)).foregroundStyle(color); if !caption.isEmpty { Text(caption).font(.caption).foregroundStyle(.secondary) } }.frame(maxWidth: .infinity) }
     private func row(_ label: String, _ value: QuotaWindow?) -> some View {
         VStack(alignment: .leading, spacing: 6) { HStack { Text(label); Spacer(); Text(value.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—") }; ProgressView(value: value?.remainingPercent ?? 0, total: 100); Text(value?.resetsAt.map { "重置：\($0.formatted(date: .abbreviated, time: .shortened))" } ?? "额度信息不可用").font(.caption).foregroundStyle(.secondary) }
     }
