@@ -1,26 +1,51 @@
 # Codex Quota Menu Bar
 
-[中文](README.md)
+A native macOS menu bar app for viewing your current Codex five-hour and weekly quota.
 
-A native macOS menu bar app that shows the remaining Codex five-hour and weekly quota in real time.
+## How it works
 
-## Features
+On launch, the app reads the existing local Codex sign-in state and requests quota data from Codex. It shows the result in the menu bar, for example: `5h 72% · W 54%`.
 
-- Menu bar display: `5h 72% · W 54%`
-- Left-click to refresh and open the detail window
-- Right-click menu: refresh now, show/hide details, open Codex Usage, launch at login, and quit
-- Detail window with plan, quota progress, reset times, and reset credits when returned by the service
-- Draggable, always-on-top detail window
+- Left-click the menu bar quota to refresh and open the detail panel.
+- Right-click it to refresh, show or hide the panel, use the floating orb, manage launch at login, or quit.
+- The detail panel shows the plan, quota progress, and reset time, and can be moved.
+- You can collapse the panel into a floating orb and click the orb to expand it again.
 
-## Build and run
+The app doesn't ask for a separate username or password. Before first use, sign in to Codex Desktop or the Codex CLI.
 
-Sign in to Codex Desktop or the Codex CLI before first use.
+## Build and launch
+
+macOS and Swift 6 are required.
 
 ```bash
 ./Scripts/build-app.sh
 open dist/CodexQuotaMenuBar.app
 ```
 
-The unsigned local app is created at `dist/CodexQuotaMenuBar.app`. It reads only `~/.codex/auth.json` (or `CODEX_HOME/auth.json`) and sends the existing login token only to Codex quota endpoints on `chatgpt.com`. It does not save tokens, chat content, or raw API responses.
+The built app is `dist/CodexQuotaMenuBar.app`. The build script also generates and embeds the application icon.
 
-The detail panel supports dynamic colors and floating-orb mode. Official usage analytics render only when the service returns real records; otherwise the app shows an unavailable state and links to the official Usage page.
+## Security and privacy
+
+The app reads only your existing Codex sign-in credentials from `~/.codex/auth.json` (or `CODEX_HOME/auth.json`) and sends that existing token only to Codex quota endpoints on `chatgpt.com`. It doesn't store the token, chat content, or raw API responses.
+
+## Troubleshooting
+
+### No quota appears in the menu bar
+
+Confirm that you are signed in to Codex Desktop or the Codex CLI, then right-click the menu bar quota and choose **Refresh Now**. If no data appears, sign in to Codex again and retry.
+
+### macOS blocks the app from opening
+
+The app is unsigned. In Finder, Control-click the app and choose **Open**, or allow it in **System Settings → Privacy & Security**.
+
+### Finder still shows the generic app icon
+
+Run `./Scripts/build-app.sh` again and replace the old app with the newly built `dist/CodexQuotaMenuBar.app`. If Finder still shows a cached icon, close and reopen that Finder window.
+
+### Swift isn't available or the build fails
+
+Install Xcode Command Line Tools and try again:
+
+```bash
+xcode-select --install
+```
