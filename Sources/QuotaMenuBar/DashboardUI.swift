@@ -1,21 +1,35 @@
 import SwiftUI
 import QuotaCore
 
-// MARK: - Palette
+// MARK: - Palette (Codex-aligned)
 
 enum Palette {
     static let cardTop = Color(red: 0.07, green: 0.09, blue: 0.13)
     static let cardBottom = Color(red: 0.03, green: 0.04, blue: 0.07)
     static let panel = Color.white.opacity(0.03)
     static let stroke = Color.white.opacity(0.06)
-    static let accent = Color(red: 0.38, green: 0.64, blue: 1.0)
-    static let ringStart = Color(red: 0.20, green: 0.80, blue: 0.95)
-    static let ringMid = Color(red: 0.35, green: 0.55, blue: 1.0)
-    static let ringEnd = Color(red: 0.66, green: 0.42, blue: 0.98)
-    static let series = Color(red: 0.95, green: 0.22, blue: 0.28)
+
+    // Codex accent: OpenAI Green #10A37F → Azure #2B8FFF
+    static let accent  = Color(red: 0.063, green: 0.639, blue: 0.498)  // #10A37F
+    static let azure   = Color(red: 0.169, green: 0.561, blue: 1.000)  // #2B8FFF
+    static let teal    = Color(red: 0.116, green: 0.600, blue: 0.749)  // mix
+
+    static let ringStart = accent
+    static let ringMid   = teal
+    static let ringEnd   = azure
+
+    static let series = azure  // bar chart fill
+    static let seriesColors: [Color] = [
+        azure,
+        accent,
+        Color(red: 0.451, green: 0.639, blue: 0.851),  // light blue
+        Color(red: 0.251, green: 0.263, blue: 0.290),  // graphite
+    ]
+
     static let borderGlow = LinearGradient(
-        colors: [Color(red: 0.20, green: 0.80, blue: 0.95), Color(red: 0.66, green: 0.42, blue: 0.98)],
+        colors: [accent, azure],
         startPoint: .topLeading, endPoint: .bottomTrailing)
+
     static let ringGradient = AngularGradient(
         colors: [ringStart, ringMid, ringEnd, ringStart],
         center: .center, angle: .degrees(-90))
@@ -24,11 +38,10 @@ enum Palette {
 // MARK: - Ring gauge
 
 struct RingGauge: View {
-    let percent: Double          // 0...100
-    var label: String            // e.g. "5h"
-    var showShield: Bool = false
+    let percent: Double
+    var label: String
     var lineWidth: CGFloat = 10
-    var percentFont: Font = .system(size: 40, weight: .semibold, design: .rounded)
+    var percentFont: Font = .system(size: 32, weight: .semibold, design: .rounded)
 
     private var fraction: CGFloat { CGFloat(min(100, max(0, percent)) / 100) }
 
@@ -44,7 +57,6 @@ struct RingGauge: View {
                     .stroke(Palette.ringGradient, style: .init(lineWidth: lineWidth, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .shadow(color: Palette.ringMid.opacity(0.55), radius: 8)
-                // Leading dot marker at the progress head.
                 Circle()
                     .fill(.white)
                     .frame(width: lineWidth + 1, height: lineWidth + 1)
@@ -53,17 +65,13 @@ struct RingGauge: View {
                     .shadow(color: Palette.ringEnd.opacity(0.8), radius: 4)
 
                 VStack(spacing: 1) {
-                    if showShield {
-                        Image(systemName: "checkmark.shield.fill")
-                            .font(.system(size: 13))
-                            .foregroundStyle(Palette.accent)
-                    }
                     HStack(alignment: .firstTextBaseline, spacing: 1) {
                         Text("\(Int(percent.rounded()))")
                             .font(percentFont)
                             .foregroundStyle(Palette.accent)
+                            .contentTransition(.numericText())
                         Text("%")
-                            .font(.system(size: 15, weight: .medium, design: .rounded))
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(Palette.accent.opacity(0.9))
                     }
                     Text(label)
@@ -72,6 +80,7 @@ struct RingGauge: View {
                 }
             }
             .padding(inset)
+            .animation(.easeInOut(duration: 0.5), value: percent)
         }
     }
 }
@@ -92,15 +101,16 @@ struct DetailView: View {
         VStack(alignment: .leading, spacing: 16) {
             header
             statPanel
-            ChartCard(title: "个人使用情况", subtitle: rangeLabel(analytics?.desktopCredits.map(\.date))) {
+            ChartCard(title: "个人使用情况",
+                      subtitle: rangeLabel(analytics?.desktopCredits.map(\.date))) {
                 BarChart(values: barValues, labels: barLabels)
             }
-            ChartCard(title: "各模型轮次趋势", subtitle: rangeLabel(analytics?.turnDates)) {
-                AreaChart(layers: trendLayers, labels: trendLabels)
+            ChartCard(title: "各模型轮次趋势",
+                      subtitle: rangeLabel(analytics?.turnDates),
+                      legendItems: trendLegendItems) {
+                AreaChart(layers: trendLayers, labels: trendLabels, colors: Palette.seriesColors)
             }
-            ChartCard(title: "技能使用", subtitle: "(近 30 天调用次数)", height: 200, showLegend: false) {
-                SkillBars(skills: skills)
-            }
+            refreshFooter
         }
         .padding(20)
         .frame(width: 560)
@@ -117,17 +127,21 @@ struct DetailView: View {
         .padding(14)
     }
 
+    // MARK: Header
+
     private var header: some View {
         HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(LinearGradient(colors: [Palette.ringStart, Palette.ringEnd],
                                      startPoint: .topLeading, endPoint: .bottomTrailing))
                 .frame(width: 34, height: 34)
-                .overlay(Image(systemName: "cube.fill").font(.system(size: 15)).foregroundStyle(.white))
+                .overlay(Image(systemName: "cube.fill")
+                    .font(.system(size: 15)).foregroundStyle(.white))
             HStack(spacing: 6) {
                 Text("CODEX").font(.system(size: 18, weight: .bold))
                 Text("·").foregroundStyle(.white.opacity(0.4))
-                Text(planName).font(.system(size: 18, weight: .bold)).foregroundStyle(Palette.accent)
+                Text(planName).font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Palette.accent)
             }
             Spacer()
             circleButton("arrow.clockwise") { model.refresh() }
@@ -147,17 +161,19 @@ struct DetailView: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: Stat panel
+
     private var statPanel: some View {
         HStack(spacing: 0) {
             statColumn(title: "五小时剩余") {
-                RingGauge(percent: fivePercent, label: "5h", showShield: true)
+                RingGauge(percent: fivePercent, label: "5h")
                     .matchedGeometryEffect(id: "ring", in: ns)
                     .frame(width: 128, height: 128)
             }
             divider
             statColumn(title: "距离下次重置") {
                 Text(resetCountdown)
-                    .font(.system(size: 44, weight: .semibold, design: .rounded))
+                    .font(.system(size: 36, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
                     .frame(maxHeight: .infinity)
             }
@@ -166,11 +182,13 @@ struct DetailView: View {
                 VStack(spacing: 4) {
                     HStack(alignment: .firstTextBaseline, spacing: 1) {
                         Text("\(Int(weeklyPercent.rounded()))")
-                            .font(.system(size: 48, weight: .semibold, design: .rounded))
-                        Text("%").font(.system(size: 20, weight: .medium, design: .rounded))
+                            .font(.system(size: 36, weight: .semibold, design: .rounded))
+                            .contentTransition(.numericText())
+                        Text("%").font(.system(size: 16, weight: .medium, design: .rounded))
                             .foregroundStyle(.white.opacity(0.85))
                     }
                     .foregroundStyle(.white)
+                    .animation(.easeInOut(duration: 0.5), value: weeklyPercent)
                     Text("\(planName) 计划")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Palette.accent)
@@ -181,13 +199,15 @@ struct DetailView: View {
         .frame(height: 190)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Palette.panel)
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Palette.stroke, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Palette.stroke, lineWidth: 1))
         )
     }
 
-    private func statColumn<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func statColumn<Content: View>(title: String,
+                                            @ViewBuilder content: () -> Content) -> some View {
         VStack(spacing: 10) {
-            Text(title).font(.system(size: 14)).foregroundStyle(.white.opacity(0.6))
+            Text(title).font(.system(size: 13)).foregroundStyle(.white.opacity(0.6))
             content()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -196,6 +216,19 @@ struct DetailView: View {
 
     private var divider: some View {
         Rectangle().fill(Palette.stroke).frame(width: 1).padding(.vertical, 24)
+    }
+
+    // MARK: Footer
+
+    private var refreshFooter: some View {
+        HStack {
+            Spacer()
+            if let time = snap?.refreshedAt {
+                Text("更新于 \(time.formatted(date: .omitted, time: .shortened))")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.22))
+            }
+        }
     }
 
     // MARK: Derived text
@@ -212,9 +245,9 @@ struct DetailView: View {
 
     private func unit(_ value: String, _ suffix: String) -> AttributedString {
         var v = AttributedString(value)
-        v.font = .system(size: 44, weight: .semibold, design: .rounded)
+        v.font = .system(size: 36, weight: .semibold, design: .rounded)
         var s = AttributedString(suffix)
-        s.font = .system(size: 22, weight: .medium, design: .rounded)
+        s.font = .system(size: 16, weight: .medium, design: .rounded)
         s.foregroundColor = .white.opacity(0.6)
         v.append(s)
         return v
@@ -228,7 +261,7 @@ struct DetailView: View {
         return "(\(f.string(from: start)) - \(f.string(from: end)))"
     }
 
-    // MARK: Chart data (real analytics, sample fallback before first load)
+    // MARK: Chart data
 
     private var analytics: UsageAnalytics? { model.analytics }
 
@@ -240,14 +273,19 @@ struct DetailView: View {
 
     private var trendLayers: [[Double]] {
         guard let series = analytics?.modelTurns, !series.isEmpty else { return Self.trendLayers }
-        // Largest-area series first so smaller ones layer on top.
         let ordered = series.sorted { $0.points.reduce(0, +) > $1.points.reduce(0, +) }
         let maxTurn = ordered.flatMap(\.points).max() ?? 1
         return ordered.map { s in s.points.map { maxTurn > 0 ? $0 / maxTurn : 0 } }
     }
     private var trendLabels: [String] { axisLabels(analytics?.turnDates) }
 
-    private var skills: [SkillUsage] { analytics?.skills ?? [] }
+    private var trendLegendItems: [(color: Color, label: String)] {
+        guard let series = analytics?.modelTurns, !series.isEmpty else { return [] }
+        let ordered = series.sorted { $0.points.reduce(0, +) > $1.points.reduce(0, +) }
+        return ordered.enumerated().map { i, s in
+            (Palette.seriesColors[i % Palette.seriesColors.count], s.model)
+        }
+    }
 
     private func normalize(_ values: [Double]) -> [Double] {
         let peak = values.max() ?? 0
@@ -261,7 +299,6 @@ struct DetailView: View {
         return picks.map { f.string(from: dates[$0]) }
     }
 
-    // Sample series for the visual design; live API exposes only current windows.
     static let usageBars: [Double] = [
         0.34, 0.95, 0.62, 0.20, 0.24, 0.18, 0.30, 0.44, 0.68, 0.50, 0.55, 0.30, 0.28,
         0.95, 0.62, 0.34, 0.22, 0.66, 0.44, 0.20, 0.42, 0.60, 0.88, 0.55, 0.62, 0.30, 0.36,
@@ -273,43 +310,55 @@ struct DetailView: View {
     ]
 }
 
-// MARK: - Chart card chrome
+// MARK: - Chart card
 
 struct ChartCard<Content: View>: View {
     let title: String
     let subtitle: String
     var height: CGFloat = 110
-    var showLegend: Bool = true
+    var legendItems: [(color: Color, label: String)] = []
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
-                Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
-                Text(subtitle).font(.system(size: 12)).foregroundStyle(.white.opacity(0.45))
+                Text(title).font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                Text(subtitle).font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.45))
                 Spacer()
-                if showLegend {
-                    HStack(spacing: 5) {
-                        Circle().fill(Palette.series).frame(width: 7, height: 7)
-                        Text("Desktop App").font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
-                    }
-                }
             }
             content().frame(height: height)
+            if !legendItems.isEmpty {
+                HStack(spacing: 14) {
+                    ForEach(legendItems.indices, id: \.self) { i in
+                        HStack(spacing: 4) {
+                            Circle().fill(legendItems[i].color)
+                                .frame(width: 7, height: 7)
+                            Text(legendItems[i].label)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
         }
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Palette.panel)
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Palette.stroke, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Palette.stroke, lineWidth: 1))
         )
     }
 }
 
-// MARK: - Bar chart
+// MARK: - Bar chart (per-bar hover)
 
 struct BarChart: View {
     let values: [Double]
     var labels: [String] = []
+    @State private var hoveredIndex: Int?
 
     var body: some View {
         VStack(spacing: 6) {
@@ -317,16 +366,36 @@ struct BarChart: View {
                 YAxis()
                 GeometryReader { geo in
                     let gap: CGFloat = 4
-                    let barW = (geo.size.width - gap * CGFloat(max(1, values.count - 1))) / CGFloat(max(1, values.count))
-                    HStack(alignment: .bottom, spacing: gap) {
-                        ForEach(values.indices, id: \.self) { i in
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(LinearGradient(colors: [Palette.series, Palette.series.opacity(0.65)],
-                                                     startPoint: .top, endPoint: .bottom))
-                                .frame(width: barW, height: max(2, geo.size.height * values[i]))
+                    let count = max(1, values.count)
+                    let barW = (geo.size.width - gap * CGFloat(count - 1)) / CGFloat(count)
+                    ZStack(alignment: .bottom) {
+                        HStack(spacing: gap) {
+                            ForEach(values.indices, id: \.self) { i in
+                                Rectangle().fill(Color.clear)
+                                    .frame(width: barW)
+                                    .frame(maxHeight: .infinity)
+                                    .contentShape(Rectangle())
+                                    .onHover { inside in
+                                        withAnimation(.easeInOut(duration: 0.12)) {
+                                            hoveredIndex = inside ? i : nil
+                                        }
+                                    }
+                            }
+                        }
+                        .frame(height: geo.size.height)
+                        HStack(alignment: .bottom, spacing: gap) {
+                            ForEach(values.indices, id: \.self) { i in
+                                let h = hoveredIndex == i
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(LinearGradient(
+                                        colors: [Palette.series,
+                                                 Palette.series.opacity(h ? 1.0 : 0.65)],
+                                        startPoint: .top, endPoint: .bottom))
+                                    .frame(width: barW,
+                                           height: max(2, geo.size.height * values[i]))
+                            }
                         }
                     }
-                    .frame(maxHeight: .infinity, alignment: .bottom)
                 }
             }
             XAxis(labels: labels)
@@ -337,8 +406,10 @@ struct BarChart: View {
 // MARK: - Stacked area chart
 
 struct AreaChart: View {
-    let layers: [[Double]]   // outer→inner, largest first
+    let layers: [[Double]]
     var labels: [String] = []
+    var colors: [Color] = [Palette.series]
+    @State private var isHovered = false
 
     var body: some View {
         VStack(spacing: 6) {
@@ -347,11 +418,20 @@ struct AreaChart: View {
                 GeometryReader { geo in
                     ZStack {
                         ForEach(layers.indices, id: \.self) { i in
-                            let opacity = 0.30 + 0.30 * Double(i)
+                            let color = colors[i % colors.count]
+                            let base = 0.25 + 0.20 * Double(i)
+                            let op = isHovered ? min(base + 0.12, 0.75) : base
                             AreaShape(points: layers[i])
-                                .fill(Palette.series.opacity(opacity))
+                                .fill(color.opacity(op))
                             AreaShape(points: layers[i], strokeOnly: true)
-                                .stroke(Palette.series.opacity(0.9), lineWidth: 1)
+                                .stroke(color.opacity(isHovered ? 1.0 : 0.9),
+                                        lineWidth: isHovered ? 1.5 : 1)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onHover { inside in
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isHovered = inside
                         }
                     }
                 }
@@ -370,9 +450,9 @@ struct AreaShape: Shape {
         guard points.count > 1 else { return path }
         let stepX = rect.width / CGFloat(points.count - 1)
         func pt(_ i: Int) -> CGPoint {
-            CGPoint(x: rect.minX + stepX * CGFloat(i), y: rect.maxY - rect.height * CGFloat(points[i]))
+            CGPoint(x: rect.minX + stepX * CGFloat(i),
+                    y: rect.maxY - rect.height * CGFloat(points[i]))
         }
-        // Smooth curve through the points.
         path.move(to: pt(0))
         for i in 1..<points.count {
             let prev = pt(i - 1), cur = pt(i)
@@ -390,13 +470,14 @@ struct AreaShape: Shape {
     }
 }
 
-// MARK: - Shared Y axis labels
+// MARK: - Shared axis
 
 struct YAxis: View {
     var body: some View {
         VStack(alignment: .leading) {
             ForEach(["100%", "50%", "0%"], id: \.self) { label in
-                Text(label).font(.system(size: 10)).foregroundStyle(.white.opacity(0.35))
+                Text(label).font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.35))
                 if label != "0%" { Spacer() }
             }
         }
@@ -409,7 +490,8 @@ struct XAxis: View {
     var body: some View {
         HStack {
             ForEach(labels.indices, id: \.self) { i in
-                Text(labels[i]).font(.system(size: 10)).foregroundStyle(.white.opacity(0.35))
+                Text(labels[i]).font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.35))
                 if i != labels.count - 1 { Spacer() }
             }
         }
@@ -418,50 +500,13 @@ struct XAxis: View {
     }
 }
 
-// MARK: - Skill usage leaderboard
-
-struct SkillBars: View {
-    let skills: [SkillUsage]
-
-    var body: some View {
-        if skills.isEmpty {
-            Text("暂无技能调用数据")
-                .font(.system(size: 12)).foregroundStyle(.white.opacity(0.4))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            let peak = Double(skills.map(\.count).max() ?? 1)
-            VStack(spacing: 8) {
-                ForEach(skills.indices, id: \.self) { i in
-                    let s = skills[i]
-                    HStack(spacing: 10) {
-                        Text(s.name)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.75))
-                            .lineLimit(1)
-                            .frame(width: 150, alignment: .leading)
-                        GeometryReader { geo in
-                            Capsule()
-                                .fill(LinearGradient(colors: [Palette.series, Palette.series.opacity(0.6)],
-                                                     startPoint: .leading, endPoint: .trailing))
-                                .frame(width: max(4, geo.size.width * CGFloat(Double(s.count) / peak)), height: 10)
-                                .frame(maxHeight: .infinity, alignment: .center)
-                        }
-                        Text("\(s.count)")
-                            .font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.6))
-                            .frame(width: 34, alignment: .trailing)
-                    }
-                }
-            }
-            .frame(maxHeight: .infinity, alignment: .top)
-        }
-    }
-}
-
-// MARK: - Floating ball
+// MARK: - Floating orb (visual only; drag + tap handled by AppKit layer)
 
 struct FloatingBallView: View {
     @ObservedObject var model: QuotaModel
     var ns: Namespace.ID
+    @State private var isHovered = false
+
     private var percent: Double { model.snapshot?.fiveHour?.remainingPercent ?? 0 }
 
     var body: some View {
@@ -478,10 +523,13 @@ struct FloatingBallView: View {
         }
         .frame(width: 150, height: 150)
         .padding(12)
+        .scaleEffect(isHovered ? 1.06 : 1.0)
+        .onHover { isHovered = $0 }
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isHovered)
     }
 }
 
-// MARK: - Morphing container (mutually-exclusive detail ⇆ orb)
+// MARK: - Morphing container
 
 struct MorphContainer: View {
     @ObservedObject var model: QuotaModel
@@ -492,7 +540,6 @@ struct MorphContainer: View {
             if model.isOrb {
                 FloatingBallView(model: model, ns: ns)
                     .transition(.opacity)
-                    .onTapGesture { toggle(false) }
             } else {
                 DetailView(model: model, collapse: { toggle(true) }, ns: ns)
                     .transition(.opacity)

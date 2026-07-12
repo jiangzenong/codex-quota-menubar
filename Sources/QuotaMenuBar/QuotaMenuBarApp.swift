@@ -4,6 +4,66 @@ import ServiceManagement
 import SwiftUI
 import QuotaCore
 
+// MARK: - Draggable NSHostingView with tap detection
+
+private class DraggableHostingView<Content: View>: NSHostingView<Content> {
+    var onTap: (() -> Void)?
+
+    private var mouseDownScreen: NSPoint?
+    private var windowStartOrigin: NSPoint?
+    private var hasDragged = false
+
+    override func mouseDown(with event: NSEvent) {
+        mouseDownScreen = NSEvent.mouseLocation
+        windowStartOrigin = window?.frame.origin
+        hasDragged = false
+        super.mouseDown(with: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let startOrigin = windowStartOrigin,
+              let startScreen = mouseDownScreen else {
+            super.mouseDragged(with: event)
+            return
+        }
+        hasDragged = true
+        let now = NSEvent.mouseLocation
+        window?.setFrameOrigin(NSPoint(
+            x: startOrigin.x + (now.x - startScreen.x),
+            y: startOrigin.y + (now.y - startScreen.y)))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        super.mouseUp(with: event)
+        if !hasDragged {
+            let down = mouseDownScreen ?? NSEvent.mouseLocation
+            let now = NSEvent.mouseLocation
+            if hypot(now.x - down.x, now.y - down.y) < 4 {
+                onTap?()
+            }
+        }
+        mouseDownScreen = nil
+        windowStartOrigin = nil
+        hasDragged = false
+    }
+}
+
+/// Recursively clear opaque layer backgrounds that SwiftUI's internal
+/// views paint on top of a transparent window (necessary on macOS 15).
+@MainActor
+private func clearOpaqueHostingLayers(_ view: NSView) {
+    for subview in view.subviews {
+        let name = String(describing: type(of: subview))
+        if name.contains("Hosting") || name.contains("LayoutHost") || name.contains("PlatformGroup") {
+            subview.wantsLayer = true
+            subview.layer?.backgroundColor = CGColor.clear
+        }
+        clearOpaqueHostingLayers(subview)
+    }
+}
+
+// MARK: - App
+
 @main
 struct CodexQuotaMenuBarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -26,9 +86,8 @@ struct CodexQuotaMenuBarApp: App {
     private var panel: NSPanel?
     private var subscriptions = Set<AnyCancellable>()
 
-    // Detail and orb share one panel; only the frame differs.
-    private let detailSize = NSSize(width: 588, height: 980)
-    private let orbSize = NSSize(width: 174, height: 174)
+    private let detailSize = NSSize(width: 588, height: 740)
+    private let orbSize    = NSSize(width: 174, height: 174)
     private let morphDuration = 0.45
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -37,9 +96,14 @@ struct CodexQuotaMenuBarApp: App {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        model.$snapshot.receive(on: RunLoop.main).sink { [weak self] in self?.statusItem.button?.title = QuotaFormatting.menuTitle(for: $0) }.store(in: &subscriptions)
-        model.$isOrb.receive(on: RunLoop.main).sink { [weak self] isOrb in self?.applyWindowMode(isOrb) }.store(in: &subscriptions)
-        model.refresh(); Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+        model.$snapshot.receive(on: RunLoop.main).sink { [weak self] in
+            self?.statusItem.button?.title = QuotaFormatting.menuTitle(for: $0)
+        }.store(in: &subscriptions)
+        model.$isOrb.receive(on: RunLoop.main).sink { [weak self] isOrb in
+            self?.applyWindowMode(isOrb)
+        }.store(in: &subscriptions)
+        model.refresh()
+        Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.model.refresh() }
         }
     }
@@ -68,18 +132,26 @@ struct CodexQuotaMenuBarApp: App {
         if panel == nil {
             let size = model.isOrb ? orbSize : detailSize
             let p = NSPanel(contentRect: .init(origin: .zero, size: size),
-                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+                            styleMask: [.borderless, .nonactivatingPanel],
+                            backing: .buffered, defer: false)
+            p.isFloatingPanel = true
+            p.level = .floating
             p.isOpaque = false
             p.backgroundColor = .clear
-            p.hasShadow = false
-            p.level = .floating
+            p.hasShadow = true
             p.hidesOnDeactivate = false
-            p.isMovableByWindowBackground = true
             p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            let host = NSHostingView(rootView: MorphContainer(model: model))
+            p.animationBehavior = .utilityWindow
+
+            let host = DraggableHostingView(rootView: MorphContainer(model: model))
+            host.onTap = { [weak self] in
+                guard let self, self.model.isOrb else { return }
+                self.toggleOrb()
+            }
             p.contentView = host
             p.center()
             panel = p
+            DispatchQueue.main.async { clearOpaqueHostingLayers(host) }
         }
         model.refresh()
         NSApp.activate(ignoringOtherApps: true)
@@ -87,16 +159,17 @@ struct CodexQuotaMenuBarApp: App {
     }
 
     @objc private func toggleOrb() {
-        withAnimation(.spring(response: morphDuration, dampingFraction: 0.82)) { model.isOrb.toggle() }
+        withAnimation(.spring(response: morphDuration, dampingFraction: 0.82)) {
+            model.isOrb.toggle()
+        }
     }
 
-    /// Resizes the shared panel to the target mode, keeping its center fixed so the
-    /// detail card visually collapses into the orb (and back), synced with the SwiftUI spring.
     private func applyWindowMode(_ isOrb: Bool) {
         guard let panel else { return }
         let size = isOrb ? orbSize : detailSize
         let current = panel.frame
-        let origin = NSPoint(x: current.midX - size.width / 2, y: current.midY - size.height / 2)
+        let origin = NSPoint(x: current.midX - size.width / 2,
+                             y: current.midY - size.height / 2)
         let target = NSRect(origin: origin, size: size)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = morphDuration
@@ -105,12 +178,16 @@ struct CodexQuotaMenuBarApp: App {
         }
     }
 
-    @objc private func openUsage() { NSWorkspace.shared.open(URL(string: "https://chatgpt.com/codex/settings/usage")!) }
+    @objc private func openUsage() {
+        NSWorkspace.shared.open(URL(string: "https://chatgpt.com/codex/settings/usage")!)
+    }
+
     @objc private func toggleLaunchAtLogin() {
         do {
             if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
             else { try SMAppService.mainApp.register() }
         } catch { NSSound.beep() }
     }
+
     @objc private func quit() { NSApp.terminate(nil) }
 }
