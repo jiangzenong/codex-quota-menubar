@@ -8,10 +8,16 @@ import QuotaCore
 
 private class DraggableHostingView<Content: View>: NSHostingView<Content> {
     var onTap: (() -> Void)?
+    var acceptsPoint: ((NSPoint, NSRect) -> Bool)?
 
     private var mouseDownScreen: NSPoint?
     private var windowStartOrigin: NSPoint?
     private var hasDragged = false
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard acceptsPoint?(point, bounds) ?? true else { return nil }
+        return super.hitTest(point)
+    }
 
     override func mouseDown(with event: NSEvent) {
         mouseDownScreen = NSEvent.mouseLocation
@@ -87,7 +93,7 @@ struct CodexQuotaMenuBarApp: App {
     private var subscriptions = Set<AnyCancellable>()
 
     private let detailSize = NSSize(width: 588, height: 740)
-    private let orbSize    = NSSize(width: 174, height: 174)
+    private let orbSize    = NSSize(width: 150, height: 150)
     private let morphDuration = 0.45
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -138,12 +144,19 @@ struct CodexQuotaMenuBarApp: App {
             p.level = .floating
             p.isOpaque = false
             p.backgroundColor = .clear
-            p.hasShadow = true
+            p.hasShadow = !model.isOrb
             p.hidesOnDeactivate = false
             p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             p.animationBehavior = .utilityWindow
 
             let host = DraggableHostingView(rootView: MorphContainer(model: model))
+            host.acceptsPoint = { [weak self] point, bounds in
+                guard self?.model.isOrb == true else { return true }
+                let radius = min(bounds.width, bounds.height) / 2
+                let x = point.x - bounds.midX
+                let y = point.y - bounds.midY
+                return x * x + y * y <= radius * radius
+            }
             host.onTap = { [weak self] in
                 guard let self, self.model.isOrb else { return }
                 self.toggleOrb()
@@ -166,6 +179,7 @@ struct CodexQuotaMenuBarApp: App {
 
     private func applyWindowMode(_ isOrb: Bool) {
         guard let panel else { return }
+        panel.hasShadow = !isOrb
         let size = isOrb ? orbSize : detailSize
         let current = panel.frame
         let origin = NSPoint(x: current.midX - size.width / 2,
