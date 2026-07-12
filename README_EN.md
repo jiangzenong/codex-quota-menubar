@@ -46,6 +46,18 @@ Confirm that you are signed in to Codex Desktop or the Codex CLI, then right-cli
 
 The app is unsigned. In Finder, Control-click the app and choose **Open**, or allow it in **System Settings → Privacy & Security**.
 
+### The DMG or app says it is damaged and can't be opened
+
+If the DMG itself can't be mounted, delete it and download it again from [Releases](https://github.com/jiangzenong/codex-quota-menubar/releases/latest). Don't bypass macOS security checks for a DMG from an unknown source.
+
+If the DMG opens but the app still reports that it is damaged after you drag it to Applications, first confirm that it came from this repository's Release. Then run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/CodexQuotaMenuBar.app
+```
+
+Try opening the app again. If macOS still asks for confirmation, go to **System Settings → Privacy & Security** and choose **Open Anyway**.
+
 ### Finder still shows the generic app icon
 
 Run `./Scripts/build-app.sh` again and replace the old app with the newly built `dist/CodexQuotaMenuBar.app`. If Finder still shows a cached icon, close and reopen that Finder window.
