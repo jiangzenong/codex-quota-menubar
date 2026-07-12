@@ -477,7 +477,7 @@ struct DailyBarChart: View {
                     Text(yLabels[i]).font(.system(size: 10, design: .monospaced)).foregroundStyle(colors.textSecondary)
                     if i < yLabels.count-1 { Spacer() }
                 }
-            }.frame(width: 30)
+            }.frame(width: 30).padding(.bottom, 22)
             if data.isEmpty { Spacer() } else {
                 GeometryReader { geo in
                     let count = data.count, gap: CGFloat = 4
@@ -498,7 +498,7 @@ struct DailyBarChart: View {
                                     let h = hoveredIndex == i
                                     RoundedRectangle(cornerRadius: 4)
                                         .fill(Accent.red.opacity(h ? 1 : (hoveredIndex == nil ? 0.78 : 0.28)))
-                                        .frame(width: barW, height: max(2, chartH * CGFloat(data[i])))
+                                        .frame(width: barW, height: chartH * CGFloat(data[i]))
                                         .allowsHitTesting(false)
                                 }
                             }
