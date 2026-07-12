@@ -23,4 +23,5 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict><key>CFBundleExecutable</key><string>CodexQuotaMenuBar</string><key>CFBundleIconFile</key><string>AppIcon.icns</string><key>CFBundleIconFiles</key><array><string>AppIcon.icns</string></array><key>CFBundleIdentifier</key><string>local.codex.quota-menubar</string><key>CFBundleName</key><string>CodexQuotaMenuBar</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>
 PLIST
+touch "$app"
 echo "$app"

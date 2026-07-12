@@ -353,7 +353,7 @@ struct DetailView: View {
                 Text(loc.t("noData")).font(.system(size: 12)).foregroundStyle(colors.textSecondary)
                     .frame(height: 180).frame(maxWidth: .infinity)
             } else {
-                DailyBarChart(values: barValues, labels: barDayLabels, colors: colors).frame(height: 180)
+                DailyBarChart(values: barValues, labels: barDayLabels, colors: colors).frame(height: 140)
                 HStack(spacing: 8) {
                     RoundedRectangle(cornerRadius: 2).fill(Accent.red).frame(width: 10, height: 10)
                     Text(loc.t("desktopApp")).font(.system(size: 12, weight: .semibold)).foregroundStyle(Accent.red)
@@ -550,11 +550,12 @@ struct ModelAreaChart: View {
                     Text(yLabels[i]).font(.system(size: 10, design: .monospaced)).foregroundStyle(colors.textSecondary)
                     if i < yLabels.count-1 { Spacer() }
                 }
-            }.frame(width: 30)
+            }.frame(width: 30).padding(.bottom, 22)
             if data.isEmpty { Spacer() } else {
-                VStack(spacing: 0) {
-                    GeometryReader { geo in
-                        let chartW = geo.size.width
+                GeometryReader { geo in
+                    let chartW = geo.size.width
+                    let chartH = max(1, geo.size.height - 22)
+                    VStack(spacing: 0) {
                         ZStack {
                             ForEach(data.indices, id: \.self) { i in
                                 let accent = Accent.seriesColors[i % Accent.seriesColors.count]
@@ -566,18 +567,19 @@ struct ModelAreaChart: View {
                             // Vertical indicator
                             if let hx = hoverX, chartW > 0 {
                                 Rectangle().fill(colors.textSecondary.opacity(0.3)).frame(width: 1)
-                                    .position(x: hx, y: geo.size.height/2)
+                                    .position(x: hx, y: chartH/2)
                                 // Dots at intersection
                                 let idx = min(Int((hx / chartW) * CGFloat((data.first?.count ?? 2)-1)), (data.first?.count ?? 2)-2)
                                 let stepX = chartW / CGFloat((data.first?.count ?? 2)-1)
                                 ForEach(data.indices, id: \.self) { i in
                                     let accent = Accent.seriesColors[i % Accent.seriesColors.count]
                                     let x = stepX * CGFloat(idx)
-                                    let y = geo.size.height * CGFloat(1 - data[i][idx])
+                                    let y = chartH * CGFloat(1 - data[i][idx])
                                     Circle().fill(accent).frame(width: 4, height: 4).position(x: x, y: y)
                                 }
                             }
                         }
+                        .frame(height: chartH)
                         .contentShape(Rectangle())
                         .onHover { _ in }
                         .onContinuousHover { phase in
@@ -586,13 +588,13 @@ struct ModelAreaChart: View {
                             case .ended: hoverX = nil
                             }
                         }
+                        HStack {
+                            ForEach(labels.indices, id: \.self) { i in
+                                Text(labels[i]).font(.system(size: 10, design: .monospaced)).foregroundStyle(colors.textSecondary)
+                                if i < labels.count-1 { Spacer() }
+                            }
+                        }.padding(.top, 4).frame(height: labels.isEmpty ? 0 : 16)
                     }
-                    HStack {
-                        ForEach(labels.indices, id: \.self) { i in
-                            Text(labels[i]).font(.system(size: 10, design: .monospaced)).foregroundStyle(colors.textSecondary)
-                            if i < labels.count-1 { Spacer() }
-                        }
-                    }.padding(.top, 4).frame(height: labels.isEmpty ? 0 : 16)
                 }
             }
         }
