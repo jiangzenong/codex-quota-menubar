@@ -45,6 +45,38 @@ public struct QuotaSnapshot: Sendable, Equatable {
     }
 }
 
+public struct DailyValue: Sendable, Equatable {
+    public let date: Date
+    public let value: Double
+    public init(date: Date, value: Double) { self.date = date; self.value = value }
+}
+
+public struct ModelSeries: Sendable, Equatable {
+    public let model: String
+    public let points: [Double]
+    public init(model: String, points: [Double]) { self.model = model; self.points = points }
+}
+
+public struct SkillUsage: Sendable, Equatable {
+    public let name: String
+    public let count: Int
+    public init(name: String, count: Int) { self.name = name; self.count = count }
+}
+
+public struct UsageAnalytics: Sendable, Equatable {
+    public let desktopCredits: [DailyValue]   // 个人使用情况
+    public let turnDates: [Date]              // x-axis for modelTurns
+    public let modelTurns: [ModelSeries]      // 各模型轮次趋势
+    public let skills: [SkillUsage]           // 技能使用
+
+    public init(desktopCredits: [DailyValue], turnDates: [Date], modelTurns: [ModelSeries], skills: [SkillUsage]) {
+        self.desktopCredits = desktopCredits
+        self.turnDates = turnDates
+        self.modelTurns = modelTurns
+        self.skills = skills
+    }
+}
+
 public enum QuotaFormatting {
     public static func menuTitle(for snapshot: QuotaSnapshot?) -> String {
         guard let snapshot, snapshot.status == .ok || snapshot.status == .stale,
