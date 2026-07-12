@@ -30,8 +30,26 @@ final class QuotaCoreTests: XCTestCase {
         XCTAssertEqual(StatusClickRoute.forRightMouseUp(false), .detailWindow)
     }
 
-    func testOfficialAnalyticsRejectsRowsWithoutDateAndValues() {
-        XCTAssertNil(OfficialUsageEvent.parse(["date": "2026-07-12"]))
-        XCTAssertNil(OfficialUsageEvent.parse(["product_surface_usage_values": ["desktop_app": 20]]))
+    func testParsesDesktopCreditsPerDay() throws {
+        let json = #"{"data":[{"date":"2026-06-13","product_surface_usage_values":{"desktop_app":0.0,"cli":1.0}},{"date":"2026-06-14","product_surface_usage_values":{"desktop_app":47.1}}]}"#
+        let values = try QuotaAPI.parseDesktopCredits(Data(json.utf8))
+        XCTAssertEqual(values.count, 2)
+        XCTAssertEqual(values[1].value, 47.1, accuracy: 0.001)
+    }
+
+    func testParsesTopModelTurns() throws {
+        let json = #"{"data":[{"date":"2026-06-15","models":[{"model":"gpt-5.5","turns":47},{"model":"gpt-5.4","turns":4}]},{"date":"2026-06-16","models":[{"model":"gpt-5.5","turns":10},{"model":"gpt-5.4","turns":90}]}]}"#
+        let result = try QuotaAPI.parseModelTurns(Data(json.utf8), topN: 4)
+        XCTAssertEqual(result.dates.count, 2)
+        // gpt-5.4 has the larger total (94) so it sorts first.
+        XCTAssertEqual(result.series.first?.model, "gpt-5.4")
+        XCTAssertEqual(result.series.first?.points, [4, 90])
+    }
+
+    func testParsesAndAggregatesSkills() throws {
+        let json = #"{"data":[{"date":"2026-06-15","skill_usage_overviews":[{"skill_name":"a","display_name":"Alpha","invocation_counts":5},{"skill_name":"b","display_name":"Beta","invocation_counts":2}]},{"date":"2026-06-16","skill_usage_overviews":[{"skill_name":"a","display_name":"Alpha","invocation_counts":3}]}]}"#
+        let skills = try QuotaAPI.parseSkills(Data(json.utf8), topN: 8)
+        XCTAssertEqual(skills.first?.name, "Alpha")
+        XCTAssertEqual(skills.first?.count, 8)
     }
 }
