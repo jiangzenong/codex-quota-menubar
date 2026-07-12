@@ -15,10 +15,11 @@ The app doesn't ask for a separate username or password. Before first use, sign 
 
 ## Download
 
-Download the latest version from [Releases](https://github.com/jiangzenong/codex-quota-menubar/releases/latest). Cloning the repository and building locally aren't required.
+Download the latest version from [Releases](https://github.com/jiangzenong/codex-quota-menubar/releases/latest). Cloning the repository and building locally aren't required. DMG is recommended: open it and drag the app to the Applications folder.
 
-- Apple silicon Macs: `CodexQuotaMenuBar-macos-apple-silicon.zip`
-- Intel Macs: `CodexQuotaMenuBar-macos-intel.zip`
+- Apple silicon Macs: `CodexQuotaMenuBar-macos-apple-silicon.dmg`
+- Intel Macs: `CodexQuotaMenuBar-macos-intel.dmg`
+- ZIP files are also available as a fallback.
 
 ## Build and launch
 

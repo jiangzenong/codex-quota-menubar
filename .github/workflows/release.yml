@@ -27,10 +27,20 @@ jobs:
       - run: swift test
       - run: ./Scripts/build-app.sh
       - run: ditto -c -k --sequesterRsrc --keepParent dist/CodexQuotaMenuBar.app "${{ matrix.artifact }}.zip"
+      - name: Create disk image
+        run: |
+          stage=$(mktemp -d)
+          trap 'rm -rf "$stage"' EXIT
+          mkdir -p "$stage/Codex Quota Menu Bar"
+          cp -R dist/CodexQuotaMenuBar.app "$stage/Codex Quota Menu Bar/"
+          ln -s /Applications "$stage/Codex Quota Menu Bar/Applications"
+          hdiutil create -volname "Codex Quota Menu Bar" -srcfolder "$stage/Codex Quota Menu Bar" -ov -format UDZO "${{ matrix.artifact }}.dmg"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}.zip
+          path: |
+            ${{ matrix.artifact }}.dmg
+            ${{ matrix.artifact }}.zip
           if-no-files-found: error
 
   release:
@@ -45,4 +55,4 @@ jobs:
           merge-multiple: true
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release-assets/*.zip --repo "$GITHUB_REPOSITORY" --generate-notes --title "$GITHUB_REF_NAME"
+        run: gh release create "$GITHUB_REF_NAME" release-assets/*.dmg release-assets/*.zip --repo "$GITHUB_REPOSITORY" --generate-notes --title "$GITHUB_REF_NAME"
