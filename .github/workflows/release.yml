@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Apple silicon
+            runner: macos-15
+            artifact: CodexQuotaMenuBar-macos-apple-silicon
+          - name: Intel
+            runner: macos-15-intel
+            artifact: CodexQuotaMenuBar-macos-intel
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+      - run: ./Scripts/build-app.sh
+      - run: ditto -c -k --sequesterRsrc --keepParent dist/CodexQuotaMenuBar.app "${{ matrix.artifact }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release-assets/*.zip --generate-notes --title "$GITHUB_REF_NAME"
