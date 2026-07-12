@@ -1,528 +1,622 @@
 import SwiftUI
 import QuotaCore
 
-// MARK: - Palette
+// MARK: - Color Hex Helper
 
-enum Palette {
-    static let surface = Color(red: 0.09, green: 0.09, blue: 0.10)
-    static let panel = Color.white.opacity(0.055)
-    static let stroke = Color.white.opacity(0.11)
-    static let accent = Color(red: 0.56, green: 0.64, blue: 0.72)
-    static let secondaryText = Color.white.opacity(0.58)
-    static let series = accent
-    static let seriesColors: [Color] = [
-        accent,
-        Color.white.opacity(0.62),
-        Color.white.opacity(0.42),
-        Color.white.opacity(0.24),
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 6:  (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8:  (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default: (a, r, g, b) = (255, 0, 0, 0)
+        }
+        self.init(.sRGB, red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255, opacity: Double(a) / 255)
+    }
+}
+
+// MARK: - Accent Colors
+
+enum Accent {
+    static let orange = Color(hex: "FF8400")
+    static let blue   = Color(hex: "4A9FD8")
+    static let red    = Color(hex: "D93C15")
+    static let green  = Color(hex: "7CE38B")
+    static let purple = Color(hex: "A78BFA")
+    static let seriesColors: [Color] = [.orange, .blue, .green, .purple]
+}
+
+// MARK: - Theme
+
+enum AppTheme: String, CaseIterable { case dark, light }
+
+struct AppColors {
+    let bg, cardBg, trackBg, buttonBg: Color
+    let textPrimary, textSecondary: Color
+    let syncDot, syncText, syncBg: Color
+    let ballBg, popoverBorder: Color
+
+    static func forTheme(_ theme: AppTheme) -> AppColors {
+        theme == .dark ? AppColors(
+            bg: Color(hex: "1A1A1A"), cardBg: Color(hex: "222222"),
+            trackBg: Color(hex: "181818"), buttonBg: Color(hex: "2E2E2E"),
+            textPrimary: Color(hex: "FFFFFF"), textSecondary: Color(hex: "B8B9B6"),
+            syncDot: Color(hex: "7CE38B"), syncText: Color(hex: "B6FFCE"),
+            syncBg: Color(hex: "222924"), ballBg: Color(hex: "1A1A1A"),
+            popoverBorder: Color(hex: "2E2E2E")) : AppColors(
+            bg: Color(hex: "FAFAF7"), cardBg: Color(hex: "F0F0ED"),
+            trackBg: Color(hex: "E0E0DD"), buttonBg: Color(hex: "EBEBE8"),
+            textPrimary: Color(hex: "1A1A1A"), textSecondary: Color(hex: "8A8A87"),
+            syncDot: Color(hex: "004D1A"), syncText: Color(hex: "004D1A"),
+            syncBg: Color(hex: "DFE6E1"), ballBg: Color(hex: "F0F0ED"),
+            popoverBorder: Color(hex: "E0E0DD"))
+    }
+}
+
+// MARK: - Locale (Chinese default)
+
+enum AppLocale: String, CaseIterable {
+    case zh, en
+    var next: AppLocale { self == .zh ? .en : .zh }
+    var label: String { self == .zh ? "EN" : "中" }
+    func t(_ key: String) -> String { Self.dict[self]?[key] ?? key }
+
+    private static let dict: [AppLocale: [String: String]] = [
+        .zh: [
+            "quotaOverview": "额度概览", "autoRefresh": "自动刷新",
+            "dailyUsage": "每日用量", "past7Days": "近 7 天",
+            "modelUsage": "模型用量", "today": "今日",
+            "desktopApp": "桌面应用", "synced": "已同步",
+            "refreshing": "刷新中…", "signedOut": "未登录",
+            "noConnection": "无连接", "restricted": "访问受限",
+            "nextRefresh": "下次刷新", "manual": "手动",
+            "1min": "1 分钟", "2min": "2 分钟",
+            "showWindow": "显示窗口", "hideWindow": "隐藏窗口",
+            "collapseOrb": "收起为悬浮球", "expandPanel": "展开详情面板", "showOrb": "显示悬浮球",
+            "openUsage": "打开 Codex 用量", "launchAtLogin": "开机启动",
+            "quit": "退出", "refreshNow": "立即刷新", "noData": "暂无数据",
+        ],
+        .en: [
+            "quotaOverview": "Quota Overview", "autoRefresh": "Auto Refresh",
+            "dailyUsage": "Daily Usage", "past7Days": "Past 7 days",
+            "modelUsage": "Model Usage", "today": "Today",
+            "desktopApp": "Desktop App", "synced": "Synced",
+            "refreshing": "Refreshing…", "signedOut": "Signed Out",
+            "noConnection": "No Connection", "restricted": "Access Denied",
+            "nextRefresh": "Next refresh", "manual": "Manual",
+            "1min": "1 min", "2min": "2 min",
+            "showWindow": "Show Window", "hideWindow": "Hide Window",
+            "collapseOrb": "Collapse to Orb", "expandPanel": "Expand Panel", "showOrb": "Show Orb",
+            "openUsage": "Open Codex Usage", "launchAtLogin": "Launch at Login",
+            "quit": "Quit", "refreshNow": "Refresh Now", "noData": "No data",
+        ],
     ]
 }
 
-// MARK: - Ring gauge
+// MARK: - Water Wave (fills orb from bottom, surging surface)
 
-struct RingGauge: View {
-    let percent: Double
-    var label: String
-    var lineWidth: CGFloat = 10
-    var percentFont: Font = .system(size: 32, weight: .semibold)
+struct WaterWave: Shape {
+    let level: Double   // 0…100, how much of the orb is filled
+    var phase: CGFloat  // animated horizontal offset
+    var amplitude: CGFloat = 3
+    var animatableData: CGFloat { get { phase } set { phase = newValue } }
 
-    private var fraction: CGFloat { CGFloat(min(100, max(0, percent)) / 100) }
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width; let h = rect.height
+        let waterY = h * CGFloat(1 - level / 100)
+        var path = Path()
+        path.move(to: CGPoint(x: 0, y: h))
+        path.addLine(to: CGPoint(x: 0, y: waterY))
+        for x in stride(from: 0, through: w, by: 2) {
+            let y = waterY + amplitude * sin((x + phase) * .pi / 28)
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+        path.addLine(to: CGPoint(x: w, y: h))
+        path.closeSubpath()
+        return path
+    }
+}
+
+// MARK: - Floating Ball
+
+struct FloatingBallView: View {
+    @ObservedObject var model: QuotaModel
+    @AppStorage("appTheme") private var themeSelection: String = AppTheme.dark.rawValue
+    @State private var wavePhase: CGFloat = 0
+    private var theme: AppTheme { AppTheme(rawValue: themeSelection) ?? .dark }
+    private var colors: AppColors { .forTheme(theme) }
+    private var percent: Double { model.snapshot?.fiveHour?.remainingPercent ?? 0 }
 
     var body: some View {
-        GeometryReader { geo in
-            let side = min(geo.size.width, geo.size.height)
-            let inset = lineWidth / 2 + 2
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.07), lineWidth: lineWidth)
-                Circle()
-                    .trim(from: 0, to: fraction)
-                    .stroke(Palette.accent, style: .init(lineWidth: lineWidth, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                Circle()
-                    .fill(Palette.accent)
-                    .frame(width: lineWidth, height: lineWidth)
-                    .offset(y: -(side / 2 - inset))
-                    .rotationEffect(.degrees(Double(fraction) * 360 - 90))
-
-                VStack(spacing: 1) {
-                    HStack(alignment: .firstTextBaseline, spacing: 1) {
-                        Text("\(Int(percent.rounded()))")
-                            .font(percentFont)
-                            .foregroundStyle(Palette.accent)
-                            .contentTransition(.numericText())
-                        Text("%")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Palette.accent.opacity(0.9))
-                    }
-                    Text(label)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.55))
-                }
-            }
-            .padding(inset)
-            .animation(.easeInOut(duration: 0.5), value: percent)
+        ZStack {
+            // Background
+            Circle().fill(colors.ballBg)
+            // Water body — fills from bottom proportional to percent
+            WaterWave(level: percent, phase: wavePhase + 40, amplitude: 2.5)
+                .fill(Accent.orange.opacity(theme == .dark ? 0.10 : 0.12))
+                .clipShape(Circle())
+            // Brighter surface layer — lower opacity, different phase
+            WaterWave(level: percent, phase: wavePhase, amplitude: 2)
+                .fill(Accent.orange.opacity(theme == .dark ? 0.22 : 0.26))
+                .clipShape(Circle())
+            // Percentage text
+            Text("\(Int(percent.rounded()))%")
+                .font(.system(size: 22, weight: .bold, design: .monospaced))
+                .foregroundStyle(colors.textPrimary).contentTransition(.numericText())
+            // Border
+            Circle().stroke(Accent.orange, lineWidth: 2)
+        }
+        .frame(width: 74, height: 74)
+        .clipShape(Circle())
+        .contentShape(Circle())
+        .onReceive(Timer.publish(every: 0.025, on: .main, in: .common).autoconnect()) { _ in
+            wavePhase += 0.6
         }
     }
 }
 
-// MARK: - Detail window
+// MARK: - Detail View
 
 struct DetailView: View {
     @ObservedObject var model: QuotaModel
     let collapse: () -> Void
-    var ns: Namespace.ID
+    @AppStorage("appTheme") private var themeSelection: String = AppTheme.dark.rawValue
+    @AppStorage("appLocale") private var localeSelection: String = AppLocale.zh.rawValue
+    @AppStorage("refreshInterval") private var refreshSelection: String = "60"
+    @State private var hoveringButton: String? = nil
 
+    private var theme: AppTheme { AppTheme(rawValue: themeSelection) ?? .dark }
+    private var colors: AppColors { .forTheme(theme) }
+    private var loc: AppLocale { AppLocale(rawValue: localeSelection) ?? .zh }
     private var snap: QuotaSnapshot? { model.snapshot }
     private var fivePercent: Double { snap?.fiveHour?.remainingPercent ?? 0 }
     private var weeklyPercent: Double { snap?.weekly?.remainingPercent ?? 0 }
-    private var planName: String { (snap?.plan ?? "").isEmpty ? "PRO" : snap!.plan! }
+    private var planName: String { (snap?.plan ?? "").isEmpty ? "Pro" : snap!.plan! }
+
+    private enum SyncState { case synced, refreshing, unavailable, restricted, signedOut }
+    private var syncState: SyncState {
+        if model.isRefreshing { return .refreshing }
+        guard let s = snap?.status else { return .unavailable }
+        switch s {
+        case .ok, .stale: return .synced
+        case .signedOut: return .signedOut
+        case .unavailable:
+            let msg = snap?.message ?? ""
+            return msg.contains("Access denied") || msg.contains("VPN") ? .restricted : .unavailable
+        }
+    }
+    private var syncText: String {
+        switch syncState {
+        case .synced: return loc.t("synced"); case .refreshing: return loc.t("refreshing")
+        case .signedOut: return loc.t("signedOut"); case .restricted: return loc.t("restricted")
+        case .unavailable: return loc.t("noConnection")
+        }
+    }
+    private var syncDotColor: Color {
+        switch syncState {
+        case .synced: return colors.syncDot
+        case .refreshing: return Accent.orange
+        case .unavailable, .restricted: return Color(hex: "E05050")
+        case .signedOut: return Color(hex: "E0A040")
+        }
+    }
+    private var syncBgColor: Color {
+        switch syncState {
+        case .synced: return colors.syncBg
+        case .refreshing: return Accent.orange.opacity(0.15)
+        case .unavailable, .restricted: return Color(hex: "E05050").opacity(0.12)
+        case .signedOut: return Color(hex: "E0A040").opacity(0.12)
+        }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            header
-            statPanel
-            ChartCard(title: "个人使用情况",
-                      subtitle: rangeLabel(analytics?.desktopCredits.map(\.date))) {
-                BarChart(values: barValues, labels: barLabels)
-            }
-            ChartCard(title: "各模型轮次趋势",
-                      subtitle: rangeLabel(analytics?.turnDates),
-                      legendItems: trendLegendItems) {
-                AreaChart(layers: trendLayers, labels: trendLabels, colors: Palette.seriesColors)
-            }
-            refreshFooter
+        VStack(alignment: .leading, spacing: 12) {
+            header; quotaOverviewSection; autoRefreshSection
+            dailyUsageSection; modelUsageSection
         }
-        .padding(20)
-        .frame(width: 560)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Palette.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(Palette.stroke, lineWidth: 1)
-        )
-        .padding(14)
+        .padding(16)
+        .frame(width: 480)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(colors.bg))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(colors.popoverBorder, lineWidth: 1))
     }
 
     // MARK: Header
 
     private var header: some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Palette.panel)
-                .frame(width: 34, height: 34)
-                .overlay(Image(systemName: "cube.fill")
-                    .font(.system(size: 15)).foregroundStyle(Palette.secondaryText))
-            HStack(spacing: 6) {
-                Text("CODEX").font(.system(size: 18, weight: .bold))
-                Text("·").foregroundStyle(.white.opacity(0.4))
-                Text(planName).font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Palette.accent)
-            }
+        HStack(spacing: 0) {
+            HStack(spacing: 8) { planBadge; syncBadge }
             Spacer()
-            circleButton("arrow.clockwise") { model.refresh() }
-            circleButton("circle.circle") { collapse() }
+            HStack(spacing: 6) {
+                iconButton("arrow.clockwise", id: "refresh") { model.refresh() }
+                iconButton(theme == .dark ? "sun.max" : "moon.stars", id: "theme") {
+                    themeSelection = (theme == .dark ? AppTheme.light : AppTheme.dark).rawValue
+                }
+                langButton
+                iconButton("minus", id: "collapse") { collapse() }
+            }
         }
     }
 
-    private func circleButton(_ systemName: String, action: @escaping () -> Void) -> some View {
+    private var planBadge: some View {
+        Text(planName).font(.system(size: 13, weight: .bold))
+            .foregroundStyle(Color(hex: "0A0A0A"))
+            .padding(.horizontal, 12).padding(.vertical, 5)
+            .background(Accent.orange).clipShape(Capsule())
+    }
+
+    private var syncBadge: some View {
+        HStack(spacing: 6) {
+            Circle().fill(syncDotColor).frame(width: 7, height: 7)
+            Text(syncText).font(.system(size: 12, weight: .semibold)).foregroundStyle(syncDotColor)
+        }
+        .padding(.horizontal, 9).padding(.vertical, 6)
+        .background(syncBgColor).clipShape(Capsule())
+    }
+
+    private var langButton: some View {
+        Button(action: { localeSelection = loc.next.rawValue }) {
+            Text(loc.label).font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(colors.textPrimary).frame(width: 32, height: 32)
+                .background(RoundedRectangle(cornerRadius: 8).fill(colors.buttonBg))
+        }.buttonStyle(.plain)
+    }
+
+    private func iconButton(_ systemName: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.7))
-                .frame(width: 34, height: 34)
-                .background(Circle().fill(Color.white.opacity(0.05)))
-                .overlay(Circle().stroke(Palette.stroke, lineWidth: 1))
+            Image(systemName: systemName).font(.system(size: 14, weight: .medium))
+                .foregroundStyle(colors.textPrimary).frame(width: 32, height: 32)
+                .background(RoundedRectangle(cornerRadius: 8)
+                    .fill(colors.buttonBg).overlay(RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.white.opacity(hoveringButton == id ? 0.08 : 0))))
         }
         .buttonStyle(.plain)
+        .onHover { inside in hoveringButton = inside ? id : nil }
     }
 
-    // MARK: Stat panel
+    // MARK: Quota Overview
 
-    private var statPanel: some View {
-        HStack(spacing: 0) {
-            statColumn(title: "五小时剩余") {
-                RingGauge(percent: fivePercent, label: "5h")
-                    .matchedGeometryEffect(id: "ring", in: ns)
-                    .frame(width: 128, height: 128)
-            }
-            divider
-            statColumn(title: "距离下次重置") {
-                Text(resetCountdown)
-                    .font(.system(size: 36, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxHeight: .infinity)
-            }
-            divider
-            statColumn(title: "本周剩余") {
-                VStack(spacing: 4) {
-                    HStack(alignment: .firstTextBaseline, spacing: 1) {
-                        Text("\(Int(weeklyPercent.rounded()))")
-                            .font(.system(size: 36, weight: .semibold))
-                            .contentTransition(.numericText())
-                        Text("%").font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.85))
-                    }
-                    .foregroundStyle(.white)
-                    .animation(.easeInOut(duration: 0.5), value: weeklyPercent)
-                    Text("\(planName) 计划")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Palette.accent)
-                }
-                .frame(maxHeight: .infinity)
-            }
-        }
-        .frame(height: 190)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Palette.panel)
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Palette.stroke, lineWidth: 1))
-        )
-    }
-
-    private func statColumn<Content: View>(title: String,
-                                            @ViewBuilder content: () -> Content) -> some View {
-        VStack(spacing: 10) {
-            Text(title).font(.system(size: 13)).foregroundStyle(.white.opacity(0.6))
-            content()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.vertical, 18)
-    }
-
-    private var divider: some View {
-        Rectangle().fill(Palette.stroke).frame(width: 1).padding(.vertical, 24)
-    }
-
-    // MARK: Footer
-
-    private var refreshFooter: some View {
-        HStack {
-            Spacer()
-            if let time = snap?.refreshedAt {
-                Text("更新于 \(time.formatted(date: .omitted, time: .shortened))")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.22))
+    private var quotaOverviewSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(loc.t("quotaOverview")).font(.system(size: 15, weight: .semibold)).foregroundStyle(colors.textPrimary)
+            HStack(spacing: 10) {
+                QuotaCard(percent: fivePercent, watermark: "5", accent: Accent.orange,
+                          prefix: loc.t("nextRefresh"), time: fiveHourNextTime, remaining: fiveHourRemaining, colors: colors)
+                QuotaCard(percent: weeklyPercent, watermark: "7", accent: Accent.blue,
+                          prefix: loc.t("nextRefresh"), time: weeklyNextDate, remaining: "", colors: colors)
             }
         }
     }
 
-    // MARK: Derived text
+    private var fiveHourNextTime: String {
+        guard let reset = snap?.fiveHour?.resetsAt else { return "—" }
+        let f = DateFormatter(); f.dateFormat = "HH:mm"
+        return f.string(from: reset)
+    }
 
-    private var resetCountdown: AttributedString {
-        guard let reset = snap?.fiveHour?.resetsAt else { return unit("—", "") }
+    private var fiveHourRemaining: String {
+        guard let reset = snap?.fiveHour?.resetsAt else { return "" }
         let secs = max(0, reset.timeIntervalSinceNow)
-        let h = Int(secs) / 3600, m = (Int(secs) % 3600) / 60
-        var out = unit("\(h)", "h")
-        out.append(AttributedString(" "))
-        out.append(unit("\(m)", "m"))
-        return out
+        return "\(Int(secs)/3600)h \(Int(secs)%3600/60)m"
     }
 
-    private func unit(_ value: String, _ suffix: String) -> AttributedString {
-        var v = AttributedString(value)
-        v.font = .system(size: 36, weight: .semibold)
-        var s = AttributedString(suffix)
-        s.font = .system(size: 16, weight: .medium)
-        s.foregroundColor = .white.opacity(0.6)
-        v.append(s)
-        return v
+    private var weeklyNextDate: String {
+        guard let reset = snap?.weekly?.resetsAt else { return "—" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: loc == .zh ? "zh_CN" : "en_US")
+        f.dateFormat = loc == .zh ? "M月d日" : "MMM d"
+        return f.string(from: reset)
     }
 
-    private func rangeLabel(_ dates: [Date]?) -> String {
-        let cal = Calendar.current
-        let end = dates?.last ?? snap?.weekly?.resetsAt ?? .now
-        let start = dates?.first ?? cal.date(byAdding: .day, value: -29, to: end) ?? end
-        let f = DateFormatter(); f.dateFormat = "M月d日"
-        return "(\(f.string(from: start)) - \(f.string(from: end)))"
+    // MARK: Auto Refresh
+
+    private var autoRefreshSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(loc.t("autoRefresh")).font(.system(size: 15, weight: .semibold)).foregroundStyle(colors.textPrimary)
+                Spacer()
+                Text(intervalLabel(refreshSelection)).font(.system(size: 13, weight: .semibold, design: .monospaced)).foregroundStyle(colors.textPrimary)
+            }
+            HStack(spacing: 6) {
+                ForEach(["30", "60", "120", "0"], id: \.self) { val in
+                    let sel = refreshSelection == val
+                    Button(action: {
+                        refreshSelection = val
+                        AppDelegate.refreshTimerDidChange?()
+                    }) {
+                        Text(intervalLabel(val)).font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundStyle(sel ? Color(hex: "0A0A0A") : colors.textSecondary)
+                            .frame(maxWidth: .infinity).padding(.vertical, 6)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(sel ? Accent.orange : colors.buttonBg))
+                    }.buttonStyle(.plain)
+                }
+            }
+        }
     }
 
-    // MARK: Chart data
+    private func intervalLabel(_ val: String) -> String {
+        switch val { case "30": "30s"; case "60": loc.t("1min"); case "120": loc.t("2min"); case "0": loc.t("manual"); default: loc.t("1min") }
+    }
+
+    // MARK: Daily Usage
+
+    private var dailyUsageSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(loc.t("dailyUsage")).font(.system(size: 15, weight: .semibold)).foregroundStyle(colors.textPrimary)
+                Spacer()
+                Text(loc.t("past7Days")).font(.system(size: 12)).foregroundStyle(colors.textSecondary)
+            }
+            if barValues.isEmpty {
+                Text(loc.t("noData")).font(.system(size: 12)).foregroundStyle(colors.textSecondary)
+                    .frame(height: 180).frame(maxWidth: .infinity)
+            } else {
+                DailyBarChart(values: barValues, labels: barDayLabels, colors: colors).frame(height: 180)
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: 2).fill(Accent.red).frame(width: 10, height: 10)
+                    Text(loc.t("desktopApp")).font(.system(size: 12, weight: .semibold)).foregroundStyle(Accent.red)
+                }.frame(maxWidth: .infinity)
+            }
+        }
+    }
 
     private var analytics: UsageAnalytics? { model.analytics }
-
     private var barValues: [Double] {
-        guard let credits = analytics?.desktopCredits, !credits.isEmpty else { return Self.usageBars }
-        return normalize(credits.map(\.value))
+        guard let c = analytics?.desktopCredits, !c.isEmpty else { return [] }
+        return c.map(\.value)
     }
-    private var barLabels: [String] { axisLabels(analytics?.desktopCredits.map(\.date)) }
+    private var barDayLabels: [String] {
+        guard let c = analytics?.desktopCredits, !c.isEmpty else { return [] }
+        let f = DateFormatter(); f.dateFormat = "MM/dd"
+        return c.map { f.string(from: $0.date) }
+    }
+
+    // MARK: Model Usage
+
+    private var modelUsageSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(loc.t("modelUsage")).font(.system(size: 15, weight: .semibold)).foregroundStyle(colors.textPrimary)
+                Spacer()
+                Text(loc.t("past7Days")).font(.system(size: 12)).foregroundStyle(colors.textSecondary)
+            }
+            if trendLayers.isEmpty {
+                Text(loc.t("noData")).font(.system(size: 12)).foregroundStyle(colors.textSecondary)
+                    .frame(height: 140).frame(maxWidth: .infinity)
+            } else {
+                ModelAreaChart(layers: trendLayers, labels: trendLabels, colors: colors).frame(height: 140)
+            }
+            HStack(spacing: 14) {
+                ForEach(trendLegendItems.indices, id: \.self) { i in
+                    let item = trendLegendItems[i]
+                    HStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 2).fill(item.color).frame(width: 8, height: 8)
+                        Text(item.label).font(.system(size: 11)).foregroundStyle(colors.textSecondary)
+                    }
+                }
+            }.frame(maxWidth: .infinity)
+        }
+    }
 
     private var trendLayers: [[Double]] {
-        guard let series = analytics?.modelTurns, !series.isEmpty else { return Self.trendLayers }
-        let ordered = series.sorted { $0.points.reduce(0, +) > $1.points.reduce(0, +) }
-        let maxTurn = ordered.flatMap(\.points).max() ?? 1
-        return ordered.map { s in s.points.map { maxTurn > 0 ? $0 / maxTurn : 0 } }
+        guard let s = analytics?.modelTurns, !s.isEmpty else { return [] }
+        return s.sorted { $0.points.reduce(0,+) > $1.points.reduce(0,+) }
+            .map(\.points)
     }
-    private var trendLabels: [String] { axisLabels(analytics?.turnDates) }
+
+    private var trendLabels: [String] {
+        guard let d = analytics?.turnDates, !d.isEmpty else { return [] }
+        let f = DateFormatter(); f.dateFormat = "MM/dd"
+        return stride(from: 0, through: d.count-1, by: max(1,(d.count-1)/4)).map { f.string(from: d[$0]) }
+    }
 
     private var trendLegendItems: [(color: Color, label: String)] {
-        guard let series = analytics?.modelTurns, !series.isEmpty else { return [] }
-        let ordered = series.sorted { $0.points.reduce(0, +) > $1.points.reduce(0, +) }
-        return ordered.enumerated().map { i, s in
-            (Palette.seriesColors[i % Palette.seriesColors.count], s.model)
-        }
+        guard let s = analytics?.modelTurns, !s.isEmpty else { return [] }
+        return s.sorted { $0.points.reduce(0,+) > $1.points.reduce(0,+) }
+            .enumerated().map { i, s in (Accent.seriesColors[i % Accent.seriesColors.count], s.model) }
     }
-
-    private func normalize(_ values: [Double]) -> [Double] {
-        let peak = values.max() ?? 0
-        return peak > 0 ? values.map { $0 / peak } : values.map { _ in 0 }
-    }
-
-    private func axisLabels(_ dates: [Date]?) -> [String] {
-        guard let dates, !dates.isEmpty else { return [] }
-        let f = DateFormatter(); f.dateFormat = "M月d日"
-        let picks = [0, dates.count / 2, dates.count - 1]
-        return picks.map { f.string(from: dates[$0]) }
-    }
-
-    static let usageBars: [Double] = [
-        0.34, 0.95, 0.62, 0.20, 0.24, 0.18, 0.30, 0.44, 0.68, 0.50, 0.55, 0.30, 0.28,
-        0.95, 0.62, 0.34, 0.22, 0.66, 0.44, 0.20, 0.42, 0.60, 0.88, 0.55, 0.62, 0.30, 0.36,
-    ]
-    static let trendLayers: [[Double]] = [
-        [0.10, 0.30, 0.70, 0.55, 0.20, 0.28, 0.62, 0.40, 0.24, 0.30, 0.52, 0.34, 0.18],
-        [0.06, 0.20, 0.48, 0.36, 0.14, 0.18, 0.42, 0.26, 0.16, 0.20, 0.34, 0.22, 0.12],
-        [0.03, 0.10, 0.26, 0.20, 0.08, 0.10, 0.22, 0.14, 0.09, 0.11, 0.18, 0.12, 0.07],
-    ]
 }
 
-// MARK: - Chart card
+// MARK: - Quota Card
 
-struct ChartCard<Content: View>: View {
-    let title: String
-    let subtitle: String
-    var height: CGFloat = 110
-    var legendItems: [(color: Color, label: String)] = []
-    @ViewBuilder var content: () -> Content
-
+struct QuotaCard: View {
+    let percent: Double; let watermark: String; let accent: Color
+    let prefix: String; let time: String; let remaining: String; let colors: AppColors
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Text(title).font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                Text(subtitle).font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.45))
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top) {
+                Text("\(Int(percent.rounded()))%")
+                    .font(.system(size: 34, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(accent).contentTransition(.numericText())
                 Spacer()
+                Text(watermark).font(.system(size: 48, weight: .bold, design: .monospaced))
+                    .foregroundStyle(LinearGradient(
+                        gradient: Gradient(stops: [.init(color: accent.opacity(0.31), location: 0),
+                                                    .init(color: accent.opacity(0.02), location: 1)]),
+                        startPoint: .top, endPoint: .bottom))
             }
-            content().frame(height: height)
-            if !legendItems.isEmpty {
-                HStack(spacing: 14) {
-                    ForEach(legendItems.indices, id: \.self) { i in
-                        HStack(spacing: 4) {
-                            Circle().fill(legendItems[i].color)
-                                .frame(width: 7, height: 7)
-                            Text(legendItems[i].label)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.white.opacity(0.5))
-                        }
-                    }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4).fill(colors.trackBg).frame(height: 6)
+                    RoundedRectangle(cornerRadius: 4).fill(accent)
+                        .frame(width: max(0, geo.size.width * CGFloat(percent/100)), height: 6)
                 }
-                .frame(maxWidth: .infinity)
+            }.frame(height: 6)
+            HStack {
+                Text(prefix).font(.system(size: 11)).foregroundStyle(colors.textSecondary)
+                Text(time).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(colors.textSecondary)
+                if !remaining.isEmpty {
+                    Spacer()
+                    Text(remaining).font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundStyle(accent)
+                }
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Palette.panel)
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Palette.stroke, lineWidth: 1))
-        )
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(colors.cardBg))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(accent.opacity(0.25), lineWidth: 1.5))
     }
 }
 
-// MARK: - Bar chart (per-bar hover)
+// MARK: - Daily Bar Chart
 
-struct BarChart: View {
-    let values: [Double]
-    var labels: [String] = []
+struct DailyBarChart: View {
+    let values: [Double]; let labels: [String]; let colors: AppColors
     @State private var hoveredIndex: Int?
-
+    private let yLabels = ["100%","75%","50%","25%","0%"]
+    private var normalized: [Double] {
+        guard let max = values.max(), max > 0 else { return values }
+        return values.map { $0 / max }
+    }
     var body: some View {
-        VStack(spacing: 6) {
-            HStack(alignment: .bottom, spacing: 0) {
-                YAxis()
+        let data = normalized
+        HStack(alignment: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                ForEach(yLabels.indices, id: \.self) { i in
+                    Text(yLabels[i]).font(.system(size: 10, design: .monospaced)).foregroundStyle(colors.textSecondary)
+                    if i < yLabels.count-1 { Spacer() }
+                }
+            }.frame(width: 30)
+            if data.isEmpty { Spacer() } else {
                 GeometryReader { geo in
-                    let gap: CGFloat = 4
-                    let count = max(1, values.count)
-                    let barW = (geo.size.width - gap * CGFloat(count - 1)) / CGFloat(count)
-                    ZStack(alignment: .bottom) {
-                        HStack(spacing: gap) {
-                            ForEach(values.indices, id: \.self) { i in
-                                Rectangle().fill(Color.clear)
-                                    .frame(width: barW)
-                                    .frame(maxHeight: .infinity)
-                                    .contentShape(Rectangle())
-                                    .onHover { inside in
-                                        withAnimation(.easeInOut(duration: 0.12)) {
-                                            hoveredIndex = inside ? i : nil
+                    let count = data.count, gap: CGFloat = 4
+                    let barW = max(1, (geo.size.width - gap*CGFloat(count-1)) / CGFloat(count))
+                    let chartH = max(1, geo.size.height - 22)
+                    VStack(spacing: 0) {
+                        ZStack(alignment: .bottom) {
+                            HStack(alignment: .bottom, spacing: gap) {
+                                ForEach(data.indices, id: \.self) { i in
+                                    Rectangle().fill(Color.clear).frame(width: barW).frame(maxHeight: .infinity)
+                                        .contentShape(Rectangle()).onHover { inside in
+                                            withAnimation(.easeInOut(duration: 0.12)) { hoveredIndex = inside ? i : nil }
                                         }
-                                    }
+                                }
+                            }.frame(height: chartH)
+                            HStack(alignment: .bottom, spacing: gap) {
+                                ForEach(data.indices, id: \.self) { i in
+                                    let h = hoveredIndex == i
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(Accent.red.opacity(h ? 1 : (hoveredIndex == nil ? 0.78 : 0.28)))
+                                        .frame(width: barW, height: max(2, chartH * CGFloat(data[i])))
+                                        .allowsHitTesting(false)
+                                }
                             }
                         }
-                        .frame(height: geo.size.height)
-                        HStack(alignment: .bottom, spacing: gap) {
-                            ForEach(values.indices, id: \.self) { i in
-                                let h = hoveredIndex == i
-                                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                    .fill(Palette.series.opacity(h ? 1.0 : 0.65))
-                                    .frame(width: barW,
-                                           height: max(2, geo.size.height * values[i]))
+                        .overlay(alignment: .topLeading) {
+                            if let i = hoveredIndex, i < count {
+                                let x = barW/2 + CGFloat(i)*(barW + gap) - 40
+                                let y = chartH * CGFloat(1 - data[i]) - 34
+                                VStack(spacing: 2) {
+                                    Text(labels[i]).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(Accent.red)
+                                    Text(String(format: "%.0f credits", values[i])).font(.system(size: 10, weight: .medium, design: .monospaced)).foregroundStyle(Accent.red)
+                                }
+                                .padding(.horizontal, 6).padding(.vertical, 3)
+                                .background(RoundedRectangle(cornerRadius: 4).fill(colors.cardBg))
+                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Accent.red.opacity(0.3), lineWidth: 0.5))
+                                .offset(x: x, y: max(0, y))
+                                .fixedSize()
+                            }
+                        }
+                        HStack(spacing: gap) {
+                            ForEach(Array(labels.prefix(count).enumerated()), id: \.offset) { _, label in
+                                Text(label).font(.system(size: 10, design: .monospaced)).foregroundStyle(colors.textSecondary).frame(width: barW).lineLimit(1)
                             }
                         }
                     }
                 }
             }
-            XAxis(labels: labels)
         }
     }
 }
 
-// MARK: - Stacked area chart
+// MARK: - Model Area Chart
 
-struct AreaChart: View {
-    let layers: [[Double]]
-    var labels: [String] = []
-    var colors: [Color] = [Palette.series]
-    @State private var isHovered = false
-
+struct ModelAreaChart: View {
+    let layers: [[Double]]; let labels: [String]; let colors: AppColors
+    @State private var hoverX: CGFloat?
+    private let yLabels = ["100%","75%","50%","25%","0%"]
+    private var normalized: [[Double]] {
+        let all = layers.flatMap { $0 }
+        guard let max = all.max(), max > 0 else { return layers }
+        return layers.map { $0.map { $0 / max } }
+    }
     var body: some View {
-        VStack(spacing: 6) {
-            HStack(alignment: .bottom, spacing: 0) {
-                YAxis()
-                GeometryReader { geo in
-                    ZStack {
-                        ForEach(layers.indices, id: \.self) { i in
-                            let color = colors[i % colors.count]
-                            let base = 0.25 + 0.20 * Double(i)
-                            let op = isHovered ? min(base + 0.12, 0.75) : base
-                            AreaShape(points: layers[i])
-                                .fill(color.opacity(op))
-                            AreaShape(points: layers[i], strokeOnly: true)
-                                .stroke(color.opacity(isHovered ? 1.0 : 0.9),
-                                        lineWidth: isHovered ? 1.5 : 1)
+        let data = normalized
+        let isHovered = hoverX != nil
+        HStack(alignment: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                ForEach(yLabels.indices, id: \.self) { i in
+                    Text(yLabels[i]).font(.system(size: 10, design: .monospaced)).foregroundStyle(colors.textSecondary)
+                    if i < yLabels.count-1 { Spacer() }
+                }
+            }.frame(width: 30)
+            if data.isEmpty { Spacer() } else {
+                VStack(spacing: 0) {
+                    GeometryReader { geo in
+                        let chartW = geo.size.width
+                        ZStack {
+                            ForEach(data.indices, id: \.self) { i in
+                                let accent = Accent.seriesColors[i % Accent.seriesColors.count]
+                                let op = isHovered ? min(0.45 - 0.06*Double(i), 0.55) : 0.35 - 0.06*Double(i)
+                                AreaShape(points: data[i]).fill(accent.opacity(max(0.1, op)))
+                                AreaShape(points: data[i], strokeOnly: true)
+                                    .stroke(accent.opacity(isHovered ? 1.0 : 0.85), lineWidth: isHovered ? 1.5 : 1)
+                            }
+                            // Vertical indicator
+                            if let hx = hoverX, chartW > 0 {
+                                Rectangle().fill(colors.textSecondary.opacity(0.3)).frame(width: 1)
+                                    .position(x: hx, y: geo.size.height/2)
+                                // Dots at intersection
+                                let idx = min(Int((hx / chartW) * CGFloat((data.first?.count ?? 2)-1)), (data.first?.count ?? 2)-2)
+                                let stepX = chartW / CGFloat((data.first?.count ?? 2)-1)
+                                ForEach(data.indices, id: \.self) { i in
+                                    let accent = Accent.seriesColors[i % Accent.seriesColors.count]
+                                    let x = stepX * CGFloat(idx)
+                                    let y = geo.size.height * CGFloat(1 - data[i][idx])
+                                    Circle().fill(accent).frame(width: 4, height: 4).position(x: x, y: y)
+                                }
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onHover { _ in }
+                        .onContinuousHover { phase in
+                            switch phase {
+                            case .active(let loc): hoverX = loc.x
+                            case .ended: hoverX = nil
+                            }
                         }
                     }
-                    .contentShape(Rectangle())
-                    .onHover { inside in
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isHovered = inside
+                    HStack {
+                        ForEach(labels.indices, id: \.self) { i in
+                            Text(labels[i]).font(.system(size: 10, design: .monospaced)).foregroundStyle(colors.textSecondary)
+                            if i < labels.count-1 { Spacer() }
                         }
-                    }
+                    }.padding(.top, 4).frame(height: labels.isEmpty ? 0 : 16)
                 }
             }
-            XAxis(labels: labels)
         }
     }
 }
+
+// MARK: - Area Shape
 
 struct AreaShape: Shape {
-    let points: [Double]
-    var strokeOnly: Bool = false
-
+    let points: [Double]; var strokeOnly = false
     func path(in rect: CGRect) -> Path {
         var path = Path()
         guard points.count > 1 else { return path }
-        let stepX = rect.width / CGFloat(points.count - 1)
-        func pt(_ i: Int) -> CGPoint {
-            CGPoint(x: rect.minX + stepX * CGFloat(i),
-                    y: rect.maxY - rect.height * CGFloat(points[i]))
-        }
+        let stepX = rect.width / CGFloat(points.count-1)
+        func pt(_ i: Int) -> CGPoint { CGPoint(x: rect.minX + stepX * CGFloat(i), y: rect.maxY - rect.height * CGFloat(points[i])) }
         path.move(to: pt(0))
         for i in 1..<points.count {
-            let prev = pt(i - 1), cur = pt(i)
-            let midX = (prev.x + cur.x) / 2
-            path.addCurve(to: cur,
-                          control1: CGPoint(x: midX, y: prev.y),
-                          control2: CGPoint(x: midX, y: cur.y))
+            let prev = pt(i-1), cur = pt(i), midX = (prev.x+cur.x)/2
+            path.addCurve(to: cur, control1: CGPoint(x: midX, y: prev.y), control2: CGPoint(x: midX, y: cur.y))
         }
-        if !strokeOnly {
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-            path.closeSubpath()
-        }
+        if !strokeOnly { path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY)); path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY)); path.closeSubpath() }
         return path
     }
 }
 
-// MARK: - Shared axis
-
-struct YAxis: View {
-    var body: some View {
-        VStack(alignment: .leading) {
-            ForEach(["100%", "50%", "0%"], id: \.self) { label in
-                Text(label).font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.35))
-                if label != "0%" { Spacer() }
-            }
-        }
-        .frame(width: 34, alignment: .leading)
-    }
-}
-
-struct XAxis: View {
-    let labels: [String]
-    var body: some View {
-        HStack {
-            ForEach(labels.indices, id: \.self) { i in
-                Text(labels[i]).font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.35))
-                if i != labels.count - 1 { Spacer() }
-            }
-        }
-        .padding(.leading, 34)
-        .frame(height: labels.isEmpty ? 0 : 12)
-    }
-}
-
-// MARK: - Floating orb (visual only; drag + tap handled by AppKit layer)
-
-struct FloatingBallView: View {
-    @ObservedObject var model: QuotaModel
-    var ns: Namespace.ID
-    @State private var isHovered = false
-
-    private var percent: Double { model.snapshot?.fiveHour?.remainingPercent ?? 0 }
-
-    var body: some View {
-        ZStack {
-            Circle().fill(.ultraThinMaterial)
-            Circle().stroke(Color.white.opacity(isHovered ? 0.18 : 0.11), lineWidth: 1)
-            RingGauge(percent: percent, label: "5h", lineWidth: 5,
-                      percentFont: .system(size: 31, weight: .medium))
-                .matchedGeometryEffect(id: "ring", in: ns)
-                .padding(18)
-        }
-        .frame(width: 150, height: 150)
-        .clipShape(Circle())
-        .contentShape(Circle())
-        .scaleEffect(isHovered ? 1.025 : 1.0)
-        .onHover { isHovered = $0 }
-        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isHovered)
-    }
-}
-
-// MARK: - Morphing container
-
-struct MorphContainer: View {
-    @ObservedObject var model: QuotaModel
-    @Namespace private var ns
-
-    var body: some View {
-        ZStack {
-            if model.isOrb {
-                FloatingBallView(model: model, ns: ns)
-                    .transition(.opacity)
-            } else {
-                DetailView(model: model, collapse: { toggle(true) }, ns: ns)
-                    .transition(.opacity)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.spring(response: 0.45, dampingFraction: 0.82), value: model.isOrb)
-    }
-
-    private func toggle(_ orb: Bool) {
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) { model.isOrb = orb }
-    }
-}
+// MARK: - Morphing Container (no longer used — see AppDelegate for dual-panel management)
+// DetailView and FloatingBallView are now hosted in separate NSPanels.

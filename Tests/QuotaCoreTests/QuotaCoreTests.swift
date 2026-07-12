@@ -22,7 +22,7 @@ final class QuotaCoreTests: XCTestCase {
 
     func testMenuTitleShowsBothRemainingWindows() {
         let snapshot = QuotaSnapshot(plan: nil, fiveHour: .init(remainingPercent: 72.4, resetsAt: nil, duration: 18_000), weekly: .init(remainingPercent: 54.4, resetsAt: nil, duration: 604_800), resetCredits: nil, resetCreditExpirations: [], refreshedAt: .now, status: .ok, message: nil)
-        XCTAssertEqual(QuotaFormatting.menuTitle(for: snapshot), "5h 72% · W 54%")
+        XCTAssertEqual(QuotaFormatting.menuTitle(for: snapshot), "5h 72% · 7d 54%")
     }
 
     func testRightClickRoutesToContextMenu() {

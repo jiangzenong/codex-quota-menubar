@@ -36,7 +36,8 @@ public enum QuotaAPI {
             if let accountID = credentials.accountID { request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id") }
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let response = response as? HTTPURLResponse else { return .unavailable(message: "Quota service is unavailable.") }
-            if response.statusCode == 401 || response.statusCode == 403 { return .init(plan: nil, fiveHour: nil, weekly: nil, resetCredits: nil, resetCreditExpirations: [], refreshedAt: .now, status: .signedOut, message: "Codex login expired. Please sign in again.") }
+            if response.statusCode == 401 { return .init(plan: nil, fiveHour: nil, weekly: nil, resetCredits: nil, resetCreditExpirations: [], refreshedAt: .now, status: .signedOut, message: "Codex login expired. Please sign in again.") }
+            if response.statusCode == 403 { return .init(plan: nil, fiveHour: nil, weekly: nil, resetCredits: nil, resetCreditExpirations: [], refreshedAt: .now, status: .unavailable, message: "Access denied — VPN may be required.") }
             guard (200..<300).contains(response.statusCode) else {
                 log.warning("Quota fetch HTTP \(response.statusCode)")
                 return .unavailable(message: "Quota service is temporarily unavailable.")
@@ -59,6 +60,7 @@ public enum QuotaAPI {
         }
     }
 
+    /// Parse per-model turns from daily-workspace-usage-counts (matches official dashboard).
     public static func parseModelTurns(_ data: Data, topN: Int = 4) throws -> (dates: [Date], series: [ModelSeries]) {
         let days = try (JSONSerialization.jsonObject(with: data) as? [String: Any])?["data"] as? [[String: Any]] ?? []
         var dates: [Date] = []
@@ -73,7 +75,28 @@ public enum QuotaAPI {
             perDay.append(turns)
         }
         var totals: [String: Double] = [:]
-        for day in perDay { for (model, turns) in day { totals[model, default: 0] += turns } }
+        for day in perDay { for (model, t) in day { totals[model, default: 0] += t } }
+        let top = totals.sorted { $0.value > $1.value }.prefix(topN).map(\.key)
+        let series = top.map { model in ModelSeries(model: model, points: perDay.map { $0[model] ?? 0 }) }
+        return (dates, series)
+    }
+
+    /// Parse per-model credits from daily-token-usage-breakdown (used for verification).
+    public static func parseModelCredits(_ data: Data, topN: Int = 4) throws -> (dates: [Date], series: [ModelSeries]) {
+        let days = try (JSONSerialization.jsonObject(with: data) as? [String: Any])?["data"] as? [[String: Any]] ?? []
+        var dates: [Date] = []
+        var perDay: [[String: Double]] = []
+        for day in days {
+            guard let date = ymd(day["date"]) else { continue }
+            dates.append(date)
+            var credits: [String: Double] = [:]
+            for entry in (day["models"] as? [[String: Any]] ?? []) {
+                if let model = entry["model"] as? String { credits[model] = number(entry["credits"]) ?? 0 }
+            }
+            perDay.append(credits)
+        }
+        var totals: [String: Double] = [:]
+        for day in perDay { for (model, c) in day { totals[model, default: 0] += c } }
         let top = totals.sorted { $0.value > $1.value }.prefix(topN).map(\.key)
         let series = top.map { model in ModelSeries(model: model, points: perDay.map { $0[model] ?? 0 }) }
         return (dates, series)
@@ -93,7 +116,7 @@ public enum QuotaAPI {
         return counts.sorted { $0.value > $1.value }.prefix(topN).map { SkillUsage(name: names[$0.key] ?? $0.key, count: $0.value) }
     }
 
-    public static func fetchAnalytics(days: Int = 30, now: Date = .now) async -> UsageAnalytics? {
+    public static func fetchAnalytics(days: Int = 7, now: Date = .now) async -> UsageAnalytics? {
         guard let credentials = try? CodexAuth.load() else { return nil }
         var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
         let end = cal.startOfDay(for: now)
@@ -101,14 +124,14 @@ public enum QuotaAPI {
         let range = "start_date=\(ymdString(start))&end_date=\(ymdString(end))&group_by=day"
 
         async let creditsData = get("\(analyticsBase)/usage/daily-token-usage-breakdown?\(range)", credentials)
-        async let turnsData = get("\(analyticsBase)/analytics/daily-workspace-usage-counts?\(range)&workspace_user=true", credentials)
-        async let skillsData = get("\(analyticsBase)/analytics/daily-skill-usage-metrics?\(range)&workspace_user=true&top_skill_limit=10", credentials)
+        async let turnsData   = get("\(analyticsBase)/analytics/daily-workspace-usage-counts?\(range)&workspace_user=true", credentials)
+        async let skillsData  = get("\(analyticsBase)/analytics/daily-skill-usage-metrics?\(range)&workspace_user=true&top_skill_limit=10", credentials)
 
         let desktopCredits = (try? await creditsData).flatMap { try? parseDesktopCredits($0) } ?? []
-        let turns = (try? await turnsData).flatMap { try? parseModelTurns($0) } ?? (dates: [], series: [])
+        let model = (try? await turnsData).flatMap { try? parseModelTurns($0) } ?? (dates: [], series: [])
         let skills = (try? await skillsData).flatMap { try? parseSkills($0) } ?? []
-        if desktopCredits.isEmpty && turns.series.isEmpty && skills.isEmpty { return nil }
-        return UsageAnalytics(desktopCredits: desktopCredits, turnDates: turns.dates, modelTurns: turns.series, skills: skills)
+        if desktopCredits.isEmpty && model.series.isEmpty && skills.isEmpty { return nil }
+        return UsageAnalytics(desktopCredits: desktopCredits, turnDates: model.dates, modelTurns: model.series, skills: skills)
     }
 
     private static let analyticsBase = "https://chatgpt.com/backend-api/wham"

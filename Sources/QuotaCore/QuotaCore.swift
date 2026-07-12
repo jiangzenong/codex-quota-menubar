@@ -80,9 +80,9 @@ public struct UsageAnalytics: Sendable, Equatable {
 public enum QuotaFormatting {
     public static func menuTitle(for snapshot: QuotaSnapshot?) -> String {
         guard let snapshot, snapshot.status == .ok || snapshot.status == .stale,
-              let fiveHour = snapshot.fiveHour?.remainingPercent else { return "5h — · W —" }
+              let fiveHour = snapshot.fiveHour?.remainingPercent else { return "5h — · 7d —" }
         let weekly = snapshot.weekly.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—"
-        return "5h \(Int(fiveHour.rounded()))% · W \(weekly)"
+        return "5h \(Int(fiveHour.rounded()))% · 7d \(weekly)"
     }
 }
 
