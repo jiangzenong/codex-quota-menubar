@@ -1,38 +1,21 @@
 import SwiftUI
 import QuotaCore
 
-// MARK: - Palette (Codex-aligned)
+// MARK: - Palette
 
 enum Palette {
-    static let cardTop = Color(red: 0.07, green: 0.09, blue: 0.13)
-    static let cardBottom = Color(red: 0.03, green: 0.04, blue: 0.07)
-    static let panel = Color.white.opacity(0.03)
-    static let stroke = Color.white.opacity(0.06)
-
-    // Codex accent: OpenAI Green #10A37F → Azure #2B8FFF
-    static let accent  = Color(red: 0.063, green: 0.639, blue: 0.498)  // #10A37F
-    static let azure   = Color(red: 0.169, green: 0.561, blue: 1.000)  // #2B8FFF
-    static let teal    = Color(red: 0.116, green: 0.600, blue: 0.749)  // mix
-
-    static let ringStart = accent
-    static let ringMid   = teal
-    static let ringEnd   = azure
-
-    static let series = azure  // bar chart fill
+    static let surface = Color(red: 0.09, green: 0.09, blue: 0.10)
+    static let panel = Color.white.opacity(0.055)
+    static let stroke = Color.white.opacity(0.11)
+    static let accent = Color(red: 0.56, green: 0.64, blue: 0.72)
+    static let secondaryText = Color.white.opacity(0.58)
+    static let series = accent
     static let seriesColors: [Color] = [
-        azure,
         accent,
-        Color(red: 0.451, green: 0.639, blue: 0.851),  // light blue
-        Color(red: 0.251, green: 0.263, blue: 0.290),  // graphite
+        Color.white.opacity(0.62),
+        Color.white.opacity(0.42),
+        Color.white.opacity(0.24),
     ]
-
-    static let borderGlow = LinearGradient(
-        colors: [accent, azure],
-        startPoint: .topLeading, endPoint: .bottomTrailing)
-
-    static let ringGradient = AngularGradient(
-        colors: [ringStart, ringMid, ringEnd, ringStart],
-        center: .center, angle: .degrees(-90))
 }
 
 // MARK: - Ring gauge
@@ -41,7 +24,7 @@ struct RingGauge: View {
     let percent: Double
     var label: String
     var lineWidth: CGFloat = 10
-    var percentFont: Font = .system(size: 32, weight: .semibold, design: .rounded)
+    var percentFont: Font = .system(size: 32, weight: .semibold)
 
     private var fraction: CGFloat { CGFloat(min(100, max(0, percent)) / 100) }
 
@@ -54,15 +37,13 @@ struct RingGauge: View {
                     .stroke(Color.white.opacity(0.07), lineWidth: lineWidth)
                 Circle()
                     .trim(from: 0, to: fraction)
-                    .stroke(Palette.ringGradient, style: .init(lineWidth: lineWidth, lineCap: .round))
+                    .stroke(Palette.accent, style: .init(lineWidth: lineWidth, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                    .shadow(color: Palette.ringMid.opacity(0.55), radius: 8)
                 Circle()
-                    .fill(.white)
-                    .frame(width: lineWidth + 1, height: lineWidth + 1)
+                    .fill(Palette.accent)
+                    .frame(width: lineWidth, height: lineWidth)
                     .offset(y: -(side / 2 - inset))
                     .rotationEffect(.degrees(Double(fraction) * 360 - 90))
-                    .shadow(color: Palette.ringEnd.opacity(0.8), radius: 4)
 
                 VStack(spacing: 1) {
                     HStack(alignment: .firstTextBaseline, spacing: 1) {
@@ -71,7 +52,7 @@ struct RingGauge: View {
                             .foregroundStyle(Palette.accent)
                             .contentTransition(.numericText())
                         Text("%")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(Palette.accent.opacity(0.9))
                     }
                     Text(label)
@@ -115,14 +96,12 @@ struct DetailView: View {
         .padding(20)
         .frame(width: 560)
         .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(LinearGradient(colors: [Palette.cardTop, Palette.cardBottom],
-                                     startPoint: .top, endPoint: .bottom))
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Palette.surface)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(Palette.borderGlow, lineWidth: 1.5)
-                .shadow(color: Palette.ringMid.opacity(0.5), radius: 12)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Palette.stroke, lineWidth: 1)
         )
         .padding(14)
     }
@@ -131,12 +110,11 @@ struct DetailView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(LinearGradient(colors: [Palette.ringStart, Palette.ringEnd],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Palette.panel)
                 .frame(width: 34, height: 34)
                 .overlay(Image(systemName: "cube.fill")
-                    .font(.system(size: 15)).foregroundStyle(.white))
+                    .font(.system(size: 15)).foregroundStyle(Palette.secondaryText))
             HStack(spacing: 6) {
                 Text("CODEX").font(.system(size: 18, weight: .bold))
                 Text("·").foregroundStyle(.white.opacity(0.4))
@@ -173,7 +151,7 @@ struct DetailView: View {
             divider
             statColumn(title: "距离下次重置") {
                 Text(resetCountdown)
-                    .font(.system(size: 36, weight: .semibold, design: .rounded))
+                    .font(.system(size: 36, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(maxHeight: .infinity)
             }
@@ -182,9 +160,9 @@ struct DetailView: View {
                 VStack(spacing: 4) {
                     HStack(alignment: .firstTextBaseline, spacing: 1) {
                         Text("\(Int(weeklyPercent.rounded()))")
-                            .font(.system(size: 36, weight: .semibold, design: .rounded))
+                            .font(.system(size: 36, weight: .semibold))
                             .contentTransition(.numericText())
-                        Text("%").font(.system(size: 16, weight: .medium, design: .rounded))
+                        Text("%").font(.system(size: 16, weight: .medium))
                             .foregroundStyle(.white.opacity(0.85))
                     }
                     .foregroundStyle(.white)
@@ -245,9 +223,9 @@ struct DetailView: View {
 
     private func unit(_ value: String, _ suffix: String) -> AttributedString {
         var v = AttributedString(value)
-        v.font = .system(size: 36, weight: .semibold, design: .rounded)
+        v.font = .system(size: 36, weight: .semibold)
         var s = AttributedString(suffix)
-        s.font = .system(size: 16, weight: .medium, design: .rounded)
+        s.font = .system(size: 16, weight: .medium)
         s.foregroundColor = .white.opacity(0.6)
         v.append(s)
         return v
@@ -386,11 +364,8 @@ struct BarChart: View {
                         HStack(alignment: .bottom, spacing: gap) {
                             ForEach(values.indices, id: \.self) { i in
                                 let h = hoveredIndex == i
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(LinearGradient(
-                                        colors: [Palette.series,
-                                                 Palette.series.opacity(h ? 1.0 : 0.65)],
-                                        startPoint: .top, endPoint: .bottom))
+                                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                    .fill(Palette.series.opacity(h ? 1.0 : 0.65))
                                     .frame(width: barW,
                                            height: max(2, geo.size.height * values[i]))
                             }
@@ -511,19 +486,17 @@ struct FloatingBallView: View {
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(RadialGradient(colors: [Palette.cardTop, Palette.cardBottom],
-                                     center: .center, startRadius: 4, endRadius: 90))
-                .overlay(Circle().stroke(Palette.borderGlow, lineWidth: 2))
-                .shadow(color: Palette.ringMid.opacity(0.6), radius: 16)
-            RingGauge(percent: percent, label: "5h", lineWidth: 8,
-                      percentFont: .system(size: 34, weight: .semibold, design: .rounded))
+            Circle().fill(.ultraThinMaterial)
+            Circle().stroke(Color.white.opacity(isHovered ? 0.18 : 0.11), lineWidth: 1)
+            RingGauge(percent: percent, label: "5h", lineWidth: 5,
+                      percentFont: .system(size: 31, weight: .medium))
                 .matchedGeometryEffect(id: "ring", in: ns)
-                .padding(20)
+                .padding(18)
         }
         .frame(width: 150, height: 150)
-        .padding(12)
-        .scaleEffect(isHovered ? 1.06 : 1.0)
+        .clipShape(Circle())
+        .contentShape(Circle())
+        .scaleEffect(isHovered ? 1.025 : 1.0)
         .onHover { isHovered = $0 }
         .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isHovered)
     }
