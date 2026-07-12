@@ -46,6 +46,18 @@ open dist/CodexQuotaMenuBar.app
 
 该应用为本地未签名应用。请在 Finder 中按住 Control 点击应用并选择“打开”，或前往“系统设置 → 隐私与安全性”允许打开。
 
+### DMG 或应用提示“已损坏，无法打开”
+
+如果 DMG 本身无法挂载，请删除该文件并从 [Releases](https://github.com/jiangzenong/codex-quota-menubar/releases/latest) 重新下载；不要对来源不明的 DMG 绕过系统安全检查。
+
+如果 DMG 可以正常打开、但拖入“应用程序”后的应用仍提示损坏，请先确认下载来源是本仓库 Release。然后在终端执行：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/CodexQuotaMenuBar.app
+```
+
+再次打开应用后，如系统仍询问，请前往“系统设置 → 隐私与安全性”并选择“仍要打开”。
+
 ### Finder 仍显示通用图标
 
 重新运行 `./Scripts/build-app.sh`，并使用新生成的 `dist/CodexQuotaMenuBar.app` 替换旧文件。若 Finder 仍显示旧缓存，请关闭并重新打开对应 Finder 窗口。
