@@ -112,13 +112,23 @@ public enum QuotaFormatting {
         return parts.joined()
     }
 
-    public static func menuTitle(for snapshot: QuotaSnapshot?, quotaLabel: String = "额度", staleLabel: String = "Stale") -> String {
-        guard let snapshot, snapshot.status == .ok || snapshot.status == .stale,
-              !snapshot.windows.isEmpty else { return "\(quotaLabel) —" }
-        let title = sortedWindows(snapshot.windows).map {
+    public static func menuTitle(
+        for snapshot: QuotaSnapshot?,
+        quotaLabel: String = "额度",
+        loadingLabel: String = "数据加载中...",
+        unavailableLabel: String = "数据暂不可用",
+        signedOutLabel: String = "请登录 Codex"
+    ) -> String {
+        guard let snapshot else { return loadingLabel }
+        switch snapshot.status {
+        case .unavailable: return unavailableLabel
+        case .signedOut: return signedOutLabel
+        case .ok, .stale: break
+        }
+        guard !snapshot.windows.isEmpty else { return unavailableLabel }
+        return sortedWindows(snapshot.windows).map {
             "\(periodLabel(for: $0) ?? quotaLabel) \(percentText($0.remainingPercent))"
         }.joined(separator: " · ")
-        return snapshot.status == .stale ? "\(title) · \(staleLabel)" : title
     }
 }
 

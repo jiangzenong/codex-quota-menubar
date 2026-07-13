@@ -68,6 +68,27 @@ final class QuotaMenuBarTests: XCTestCase {
     }
 
     @MainActor
+    func testApplicationMenuRegistersCommandQQuitItem() {
+        let app = NSApplication.shared
+        let previousMenu = app.mainMenu
+        defer { app.mainMenu = previousMenu }
+        let delegate = AppDelegate()
+        let selector = NSSelectorFromString("installApplicationMenu")
+
+        guard delegate.responds(to: selector) else {
+            XCTFail("Application menu installer is missing")
+            return
+        }
+        delegate.perform(selector)
+
+        let quitItem = app.mainMenu?.items
+            .compactMap(\.submenu)
+            .flatMap(\.items)
+            .first { $0.keyEquivalent == "q" }
+        XCTAssertEqual(quitItem?.keyEquivalentModifierMask, [.command])
+    }
+
+    @MainActor
     func testFailedAnalyticsKeepsOldData() async {
         let oldAnalytics = UsageAnalytics(desktopCredits: [], turnDates: [], modelTurns: [], skills: [])
         let model = QuotaModel(fetchQuota: { self.snapshot(plan: "PRO") }, fetchAnalytics: { nil })
