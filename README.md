@@ -17,6 +17,27 @@
   <img src="Assets/Screenshots/dashboard.png" width="526" alt="Codex Quota Menu Bar 额度面板截图">
 </p>
 
+## 界面预览
+
+### 菜单栏与悬浮球
+
+<p align="center">
+  <img src="Assets/Screenshots/menu-bar-orb.png" width="215" alt="Codex Quota Menu Bar 菜单栏与悬浮球效果">
+</p>
+
+### 浅色与深色主题
+
+<table>
+  <tr>
+    <td align="center"><strong>浅色主题</strong></td>
+    <td align="center"><strong>深色主题</strong></td>
+  </tr>
+  <tr>
+    <td><img src="Assets/Screenshots/dashboard.png" alt="Codex Quota Menu Bar 浅色主题面板"></td>
+    <td><img src="Assets/Screenshots/dashboard-dark.png" alt="Codex Quota Menu Bar 深色主题面板"></td>
+  </tr>
+</table>
+
 ## 功能亮点
 
 - 按服务实际返回结果显示额度窗口，不假定一定同时存在 5 小时和 7 天窗口。
