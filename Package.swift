@@ -12,5 +12,6 @@ let package = Package(
         .target(name: "QuotaCore"),
         .executableTarget(name: "QuotaMenuBar", dependencies: ["QuotaCore"]),
         .testTarget(name: "QuotaCoreTests", dependencies: ["QuotaCore"]),
+        .testTarget(name: "QuotaMenuBarTests", dependencies: ["QuotaMenuBar", "QuotaCore"]),
     ]
 )
