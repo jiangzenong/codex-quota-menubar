@@ -1,10 +1,10 @@
 # Codex Quota Menu Bar
 
-A native macOS menu bar app for viewing your current Codex five-hour and weekly quota.
+A native macOS menu bar app for viewing the Codex quota windows currently active for your account.
 
 ## How it works
 
-On launch, the app reads the existing local Codex sign-in state and requests quota data from Codex. It shows the result in the menu bar, for example: `5h 72% · 7d 54%`.
+On launch, the app reads the existing local Codex sign-in state and requests quota data from Codex. The menu bar reflects the periods actually returned by the service, such as `5h 72% · 7d 54%` for two windows or `7d 98%` for one.
 
 - Left-click the menu bar quota to refresh and open the detail panel.
 - Right-click it to refresh, show or hide the panel, use the floating orb, manage launch at login, or quit.
