@@ -92,7 +92,6 @@ struct CodexQuotaMenuBarApp: App {
     private let fetchQuota: @MainActor () async -> QuotaSnapshot
     private let fetchAnalytics: @MainActor () async -> UsageAnalytics?
     private var refreshTask: Task<Void, Never>?
-    private var refreshGeneration = 0
 
     init(fetchQuota: @escaping @MainActor () async -> QuotaSnapshot = { await QuotaAPI.fetch() },
          fetchAnalytics: @escaping @MainActor () async -> UsageAnalytics? = { await QuotaAPI.fetchAnalytics() }) {
@@ -101,18 +100,27 @@ struct CodexQuotaMenuBarApp: App {
     }
 
     func refresh() {
-        refreshGeneration &+= 1
-        let generation = refreshGeneration
-        refreshTask?.cancel()
+        guard !isRefreshing else { return }
         isRefreshing = true
         refreshTask = Task { [weak self] in
             guard let self else { return }
-            async let nextSnapshot = fetchQuota()
             async let nextAnalytics = fetchAnalytics()
-            let values = await (nextSnapshot, nextAnalytics)
-            guard !Task.isCancelled, generation == refreshGeneration else { return }
-            snapshot = values.0
-            analytics = values.1
+
+            let nextSnapshot = await fetchQuota()
+            if nextSnapshot.status == .unavailable,
+               let current = snapshot,
+               current.status == .ok || current.status == .stale {
+                snapshot = .init(plan: current.plan, windows: current.windows,
+                                 resetCredits: current.resetCredits,
+                                 resetCreditExpirations: current.resetCreditExpirations,
+                                 refreshedAt: current.refreshedAt, status: .stale,
+                                 message: nextSnapshot.message)
+            } else {
+                snapshot = nextSnapshot
+            }
+
+            let analyticsResult = await nextAnalytics
+            if let analyticsResult { analytics = analyticsResult }
             isRefreshing = false
         }
     }
@@ -175,7 +183,7 @@ struct CodexQuotaMenuBarApp: App {
 
     @objc private func statusClicked() {
         let route = StatusClickRoute.forRightMouseUp(NSApp.currentEvent?.type == .rightMouseUp)
-        if route == .detailWindow { model.refresh(); togglePanel(); return }
+        if route == .detailWindow { togglePanel(); return }
         let isZh = (UserDefaults.standard.string(forKey: "appLocale") ?? "zh") == "zh"
         let l = Loc(isZh)
         let menu = NSMenu()
@@ -300,7 +308,8 @@ struct CodexQuotaMenuBarApp: App {
 
     private func updateStatusTitle(for snapshot: QuotaSnapshot?) {
         let isZh = (UserDefaults.standard.string(forKey: "appLocale") ?? "zh") == "zh"
-        statusItem.button?.title = QuotaFormatting.menuTitle(for: snapshot, quotaLabel: isZh ? "额度" : "Quota")
+        statusItem.button?.title = QuotaFormatting.menuTitle(
+            for: snapshot, quotaLabel: isZh ? "额度" : "Quota", staleLabel: isZh ? "数据过期" : "Stale")
     }
 
     @objc private func openUsage() {

@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: swift test
-      - run: ./Scripts/build-app.sh
+      - run: APP_VERSION="${GITHUB_REF_NAME#v}" ./Scripts/build-app.sh
       - run: ditto -c -k --sequesterRsrc --keepParent dist/CodexQuotaMenuBar.app "${{ matrix.artifact }}.zip"
       - name: Create disk image
         run: |

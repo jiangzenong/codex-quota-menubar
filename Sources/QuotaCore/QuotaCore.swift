@@ -112,12 +112,13 @@ public enum QuotaFormatting {
         return parts.joined()
     }
 
-    public static func menuTitle(for snapshot: QuotaSnapshot?, quotaLabel: String = "额度") -> String {
+    public static func menuTitle(for snapshot: QuotaSnapshot?, quotaLabel: String = "额度", staleLabel: String = "Stale") -> String {
         guard let snapshot, snapshot.status == .ok || snapshot.status == .stale,
               !snapshot.windows.isEmpty else { return "\(quotaLabel) —" }
-        return sortedWindows(snapshot.windows).map {
+        let title = sortedWindows(snapshot.windows).map {
             "\(periodLabel(for: $0) ?? quotaLabel) \(percentText($0.remainingPercent))"
         }.joined(separator: " · ")
+        return snapshot.status == .stale ? "\(title) · \(staleLabel)" : title
     }
 }
 

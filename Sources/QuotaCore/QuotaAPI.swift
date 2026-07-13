@@ -129,13 +129,11 @@ public enum QuotaAPI {
 
         async let creditsData = get("\(analyticsBase)/usage/daily-token-usage-breakdown?\(range)", credentials)
         async let turnsData   = get("\(analyticsBase)/analytics/daily-workspace-usage-counts?\(range)&workspace_user=true", credentials)
-        async let skillsData  = get("\(analyticsBase)/analytics/daily-skill-usage-metrics?\(range)&workspace_user=true&top_skill_limit=10", credentials)
 
         let desktopCredits = (try? await creditsData).flatMap { try? parseDesktopCredits($0) } ?? []
         let model = (try? await turnsData).flatMap { try? parseModelTurns($0) } ?? (dates: [], series: [])
-        let skills = (try? await skillsData).flatMap { try? parseSkills($0) } ?? []
-        if desktopCredits.isEmpty && model.series.isEmpty && skills.isEmpty { return nil }
-        return UsageAnalytics(desktopCredits: desktopCredits, turnDates: model.dates, modelTurns: model.series, skills: skills)
+        if desktopCredits.isEmpty && model.series.isEmpty { return nil }
+        return UsageAnalytics(desktopCredits: desktopCredits, turnDates: model.dates, modelTurns: model.series, skills: [])
     }
 
     private static let analyticsBase = "https://chatgpt.com/backend-api/wham"
