@@ -17,11 +17,14 @@ public enum QuotaAPI {
         guard !limits.isEmpty else {
             return .unavailable(message: "Quota response missing rate_limit.")
         }
-        let fiveHour = window(limits["primary_window"] ?? limits["primaryWindow"], expected: 18_000)
-        guard let fiveHour else { return .unavailable(message: "Quota response is missing the 5h window.") }
-        let weekly = window(limits["secondary_window"] ?? limits["secondaryWindow"], expected: 604_800)
+        let windows = QuotaFormatting.sortedWindows(limits.compactMap { id, value in
+            window(id: id, value: value, now: now)
+        })
+        guard !windows.isEmpty else {
+            return .unavailable(message: "Quota response contains no valid windows.")
+        }
         let plan = (root["plan_type"] ?? root["planType"] as Any?) as? String
-        return .init(plan: plan?.uppercased(), fiveHour: fiveHour, weekly: weekly,
+        return .init(plan: plan?.uppercased(), windows: windows,
                      resetCredits: nil, resetCreditExpirations: [], refreshedAt: now, status: .ok, message: nil)
     }
 
@@ -36,8 +39,8 @@ public enum QuotaAPI {
             if let accountID = credentials.accountID { request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id") }
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let response = response as? HTTPURLResponse else { return .unavailable(message: "Quota service is unavailable.") }
-            if response.statusCode == 401 { return .init(plan: nil, fiveHour: nil, weekly: nil, resetCredits: nil, resetCreditExpirations: [], refreshedAt: .now, status: .signedOut, message: "Codex login expired. Please sign in again.") }
-            if response.statusCode == 403 { return .init(plan: nil, fiveHour: nil, weekly: nil, resetCredits: nil, resetCreditExpirations: [], refreshedAt: .now, status: .unavailable, message: "Access denied — VPN may be required.") }
+            if response.statusCode == 401 { return .init(plan: nil, windows: [], resetCredits: nil, resetCreditExpirations: [], refreshedAt: .now, status: .signedOut, message: "Codex login expired. Please sign in again.") }
+            if response.statusCode == 403 { return .init(plan: nil, windows: [], resetCredits: nil, resetCreditExpirations: [], refreshedAt: .now, status: .unavailable, message: "Access denied — VPN may be required.") }
             guard (200..<300).contains(response.statusCode) else {
                 log.warning("Quota fetch HTTP \(response.statusCode)")
                 return .unavailable(message: "Quota service is temporarily unavailable.")
@@ -154,15 +157,30 @@ public enum QuotaAPI {
 
     // MARK: Helpers
 
-    private static func window(_ value: Any?, expected: TimeInterval) -> QuotaWindow? {
+    private static func window(id: String, value: Any, now: Date) -> QuotaWindow? {
         guard let value = value as? [String: Any] else { return nil }
-        let used = number(value["used_percent"] ?? value["usedPercent"])
-        let remaining = number(value["remaining_percent"] ?? value["remainingPercent"])
-        guard let percent = remaining ?? used.map({ 100 - $0 }) else { return nil }
-        let normalized = (percent <= 1 && percent > 0) ? percent * 100 : percent
-        let reset = date(value["reset_at"] ?? value["resetAt"])
-        let duration = number(value["limit_window_seconds"] ?? value["limitWindowSeconds"]) ?? expected
-        return .init(remainingPercent: normalized, resetsAt: reset, duration: duration)
+        let remainingRaw = value["remaining_percent"] ?? value["remainingPercent"]
+        let usedRaw = value["used_percent"] ?? value["usedPercent"]
+
+        let remaining: Double
+        if let remainingRaw, !(remainingRaw is NSNull) {
+            guard let parsed = number(remainingRaw) else { return nil }
+            remaining = parsed
+        } else {
+            guard let usedRaw, !(usedRaw is NSNull), let used = number(usedRaw) else { return nil }
+            remaining = 100 - used
+        }
+        guard remaining.isFinite, (0...100).contains(remaining) else { return nil }
+
+        let duration = number(value["limit_window_seconds"] ?? value["limitWindowSeconds"])
+            .flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+        let absoluteReset = date(value["reset_at"] ?? value["resetAt"])
+        let resetAfter = number(value["reset_after_seconds"] ?? value["resetAfterSeconds"])
+        let relativeReset = resetAfter.flatMap { $0.isFinite && $0 >= 0 ? now.addingTimeInterval($0) : nil }
+        let reset = absoluteReset ?? relativeReset
+        guard duration != nil || reset != nil else { return nil }
+
+        return .init(id: id, remainingPercent: remaining, resetsAt: reset, duration: duration)
     }
 
     private static func number(_ value: Any?) -> Double? {
@@ -179,8 +197,7 @@ public enum QuotaAPI {
             if let string = value as? String { return ISO8601DateFormatter().date(from: string) }
             return nil
         }
-        let nowSeconds = Date().timeIntervalSince1970
-        let seconds = num > nowSeconds * 10 ? num / 1000 : num
+        let seconds = num >= 10_000_000_000 ? num / 1000 : num
         return Date(timeIntervalSince1970: seconds)
     }
 
