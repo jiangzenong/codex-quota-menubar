@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 import OSLog
 
 private let log = Logger(subsystem: "sh.lumos.CodexQuotaMenuBar", category: "API")
@@ -184,6 +185,7 @@ public enum QuotaAPI {
     }
 
     private static func number(_ value: Any?) -> Double? {
+        if let value, CFGetTypeID(value as CFTypeRef) == CFBooleanGetTypeID() { return nil }
         if let value = value as? Double { return value }
         if let value = value as? Int { return Double(value) }
         if let value = value as? NSNumber { return value.doubleValue }

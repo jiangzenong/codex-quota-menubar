@@ -92,6 +92,14 @@ final class QuotaCoreTests: XCTestCase {
         XCTAssertTrue(snapshot.windows.isEmpty)
     }
 
+    func testRejectsBooleanQuotaNumbers() throws {
+        let json = #"{"rate_limit":{"primary_window":{"remaining_percent":true,"limit_window_seconds":18000}}}"#
+        let snapshot = try QuotaAPI.parseUsage(Data(json.utf8))
+
+        XCTAssertEqual(snapshot.status, .unavailable)
+        XCTAssertTrue(snapshot.windows.isEmpty)
+    }
+
     func testPrefersRemainingPercentAndAcceptsBoundaryValues() throws {
         let json = #"{"rate_limit":{"empty":{"remaining_percent":0,"used_percent":1,"limit_window_seconds":60},"full":{"remaining_percent":100,"used_percent":99,"limit_window_seconds":120}}}"#
         XCTAssertEqual(try QuotaAPI.parseUsage(Data(json.utf8)).windows.map(\.remainingPercent), [0, 100])
