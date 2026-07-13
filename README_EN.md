@@ -1,71 +1,101 @@
-# Codex Quota Menu Bar
+<p align="center">
+  <img src="Assets/AppIcon.png" width="112" alt="Codex Quota Menu Bar icon">
+</p>
 
-A native macOS menu bar app for viewing the Codex quota windows currently active for your account.
+<h1 align="center">Codex Quota Menu Bar</h1>
 
-## How it works
+<p align="center">See your live Codex quota, reset times, and recent usage from the macOS menu bar.</p>
 
-On launch, the app reads the existing local Codex sign-in state and requests quota data from Codex. The menu bar reflects the periods actually returned by the service, such as `5h 72% · 7d 54%` for two windows or `7d 98%` for one.
+<p align="center">
+  <a href="https://github.com/jiangzenong/codex-quota-menubar/releases/latest"><img src="https://img.shields.io/github/v/release/jiangzenong/codex-quota-menubar?display_name=tag&style=flat-square" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/macOS-15%2B-black?style=flat-square&logo=apple" alt="macOS 15+">
+  <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6">
+  <a href="README.md">简体中文</a>
+</p>
 
-- Left-click the menu bar quota to refresh and open the detail panel.
-- Right-click it to refresh, show or hide the panel, use the floating orb, manage launch at login, or quit.
-- The detail panel shows the plan, quota progress, and reset time, and can be moved.
-- You can collapse the panel into a floating orb and click the orb to expand it again.
+<p align="center">
+  <img src="Assets/Screenshots/dashboard.png" width="526" alt="Codex Quota Menu Bar dashboard">
+</p>
 
-The app doesn't ask for a separate username or password. Before first use, sign in to Codex Desktop or the Codex CLI.
+## Highlights
+
+- Displays the quota windows actually returned by the service instead of assuming both 5-hour and 7-day windows are always present.
+- Shows the plan, remaining quota, reset time, daily usage, and recent model usage trends in one panel.
+- Supports 30-second, 1-minute, 2-minute, and manual refresh modes.
+- Offers a draggable detail panel, compact floating orb, light/dark themes, and Chinese/English UI.
+- Left-click the menu bar quota to refresh and open the panel; right-click for the complete action menu.
+- Can launch at login and reuses your existing Codex sign-in without asking for another password.
 
 ## Download
 
-Download the latest version from [Releases](https://github.com/jiangzenong/codex-quota-menubar/releases/latest). Cloning the repository and building locally aren't required. DMG is recommended: open it and drag the app to the Applications folder.
+Download the latest build from [Releases](https://github.com/jiangzenong/codex-quota-menubar/releases/latest). DMG is recommended: open it and drag the app to Applications.
 
-- Apple silicon Macs: `CodexQuotaMenuBar-macos-apple-silicon.dmg`
-- Intel Macs: `CodexQuotaMenuBar-macos-intel.dmg`
-- ZIP files are also available as a fallback.
+- Apple silicon: `CodexQuotaMenuBar-macos-apple-silicon.dmg`
+- Intel: `CodexQuotaMenuBar-macos-intel.dmg`
+- ZIP archives are also provided as a fallback.
 
-## Build and launch
+Current release artifacts are ad-hoc signed and are not notarized with an Apple Developer ID. macOS may ask you to confirm the app in **System Settings → Privacy & Security** the first time it opens.
 
-macOS and Swift 6 are required.
+## Requirements
+
+- macOS 15 or later.
+- An existing Codex Desktop or Codex CLI sign-in.
+- Network access to `chatgpt.com`.
+
+## Usage
+
+On launch, the app reads your existing local Codex sign-in state and requests quota data. The menu bar reflects the windows currently returned by the service, such as `5h 72% · 7d 54%`; if only one window exists, only that window is shown.
+
+- Left-click the menu bar quota to refresh and open the detail panel.
+- Right-click it to refresh, show or hide the panel, toggle the floating orb, open Codex Usage, manage launch at login, or quit.
+- Use the controls in the panel header to refresh, change theme or language, or collapse to the orb.
+
+## Privacy and security
+
+The app reads the existing access token from `~/.codex/auth.json` (or `CODEX_HOME/auth.json`) and sends requests only to Codex quota and usage endpoints under `https://chatgpt.com/backend-api/wham/...`. It does not persist the access token, chat content, or raw responses, and it adds no separate telemetry.
+
+This is an unofficial open-source utility and is not affiliated with or endorsed by OpenAI. It relies on the web endpoints currently used by Codex, so endpoint changes may temporarily break functionality.
+
+## Build locally
+
+Swift 6 and Xcode Command Line Tools are required:
 
 ```bash
+swift test
 ./Scripts/build-app.sh
 open dist/CodexQuotaMenuBar.app
 ```
 
-The built app is `dist/CodexQuotaMenuBar.app`. The build script also generates and embeds the application icon.
-
-## Security and privacy
-
-The app reads only your existing Codex sign-in credentials from `~/.codex/auth.json` (or `CODEX_HOME/auth.json`) and sends that existing token only to Codex quota endpoints on `chatgpt.com`. It doesn't store the token, chat content, or raw API responses.
+The app bundle is written to `dist/CodexQuotaMenuBar.app`. The script generates the icon, writes bundle metadata, and applies an ad-hoc signature.
 
 ## Troubleshooting
 
 ### No quota appears in the menu bar
 
-Confirm that you are signed in to Codex Desktop or the Codex CLI, then right-click the menu bar quota and choose **Refresh Now**. If no data appears, sign in to Codex again and retry.
+Confirm that Codex Desktop or the Codex CLI is signed in, then right-click the menu bar quota and choose **Refresh Now**. If no data appears, sign in to Codex again and retry.
 
 ### macOS blocks the app from opening
 
-The app is unsigned. In Finder, Control-click the app and choose **Open**, or allow it in **System Settings → Privacy & Security**.
+Confirm the installer came from this repository's [Releases](https://github.com/jiangzenong/codex-quota-menubar/releases/latest). In Finder, Control-click the app and choose **Open**, or go to **System Settings → Privacy & Security** and choose **Open Anyway**.
 
-### The DMG or app says it is damaged and can't be opened
+### The app says it is damaged and cannot be opened
 
-If the DMG itself can't be mounted, delete it and download it again from [Releases](https://github.com/jiangzenong/codex-quota-menubar/releases/latest). Don't bypass macOS security checks for a DMG from an unknown source.
-
-If the DMG opens but the app still reports that it is damaged after you drag it to Applications, first confirm that it came from this repository's Release. Then run:
+Download the release for your architecture again. If you have confirmed it came from this repository but macOS quarantine still blocks it, run:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/CodexQuotaMenuBar.app
 ```
 
-Try opening the app again. If macOS still asks for confirmation, go to **System Settings → Privacy & Security** and choose **Open Anyway**.
+Do not bypass macOS security checks for an app from an unknown source.
 
-### Finder still shows the generic app icon
+### Swift is unavailable
 
-Run `./Scripts/build-app.sh` again and replace the old app with the newly built `dist/CodexQuotaMenuBar.app`. If Finder still shows a cached icon, close and reopen that Finder window.
-
-### Swift isn't available or the build fails
-
-Install Xcode Command Line Tools and try again:
+Install Xcode Command Line Tools and retry:
 
 ```bash
 xcode-select --install
 ```
+
+## Project status
+
+This project is still at an early stage. Feature feedback and reproducible bug reports are welcome in [Issues](https://github.com/jiangzenong/codex-quota-menubar/issues).

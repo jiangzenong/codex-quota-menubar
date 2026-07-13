@@ -1,71 +1,101 @@
-# Codex 额度菜单栏
+<p align="center">
+  <img src="Assets/AppIcon.png" width="112" alt="Codex Quota Menu Bar 图标">
+</p>
 
-macOS 原生菜单栏工具，用于查看 Codex 当前实际生效的剩余额度窗口。
+<h1 align="center">Codex Quota Menu Bar</h1>
 
-## 如何运作
+<p align="center">在 macOS 菜单栏中快速查看 Codex 实时额度、重置时间与最近用量。</p>
 
-应用启动后会从本机 Codex 登录状态中读取已有凭据，并请求 Codex 的额度接口。菜单栏会按接口实际返回的周期显示结果，例如同时存在两个窗口时显示 `5h 72% · 7d 54%`，仅有一个窗口时显示 `7d 98%`。
+<p align="center">
+  <a href="https://github.com/jiangzenong/codex-quota-menubar/releases/latest"><img src="https://img.shields.io/github/v/release/jiangzenong/codex-quota-menubar?display_name=tag&style=flat-square" alt="最新版本"></a>
+  <img src="https://img.shields.io/badge/macOS-15%2B-black?style=flat-square&logo=apple" alt="macOS 15+">
+  <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6">
+  <a href="README_EN.md">English</a>
+</p>
 
-- 左键菜单栏额度：刷新并打开详情面板。
-- 右键菜单栏额度：打开刷新、显示或隐藏面板、悬浮球、开机启动和退出等操作。
-- 详情面板展示套餐、额度进度与重置时间；可拖动到合适位置。
-- 收起详情面板后可切换为悬浮球，再次点击即可展开。
+<p align="center">
+  <img src="Assets/Screenshots/dashboard.png" width="526" alt="Codex Quota Menu Bar 额度面板截图">
+</p>
 
-应用不会要求再次输入账号密码。首次使用前，请先在 Codex Desktop 或 Codex CLI 中完成登录。
+## 功能亮点
+
+- 按服务实际返回结果显示额度窗口，不假定一定同时存在 5 小时和 7 天窗口。
+- 在详情面板中查看套餐、剩余额度、重置时间、每日用量与模型使用趋势。
+- 支持 30 秒、1 分钟、2 分钟和手动刷新。
+- 详情面板可拖动、收起为悬浮球，并支持浅色/深色主题与中英文界面。
+- 左键菜单栏额度即可刷新并打开面板；右键可打开完整操作菜单。
+- 可选开机启动，不需要再次输入 Codex 账号密码。
 
 ## 下载
 
-请从 [Releases](https://github.com/jiangzenong/codex-quota-menubar/releases/latest) 下载最新版本，无需克隆仓库或自行构建。推荐下载 DMG：打开后将应用拖入“应用程序”文件夹。
+从 [Releases](https://github.com/jiangzenong/codex-quota-menubar/releases/latest) 下载最新版本。推荐使用 DMG，打开后将应用拖入“应用程序”文件夹。
 
-- Apple 芯片 Mac：`CodexQuotaMenuBar-macos-apple-silicon.dmg`
-- Intel 芯片 Mac：`CodexQuotaMenuBar-macos-intel.dmg`
-- 同时提供 ZIP 作为备用下载。
+- Apple 芯片：`CodexQuotaMenuBar-macos-apple-silicon.dmg`
+- Intel 芯片：`CodexQuotaMenuBar-macos-intel.dmg`
+- Release 同时提供 ZIP 备用包。
 
-## 构建与启动
+当前发布包使用 ad-hoc 签名，尚未使用 Apple Developer ID 公证。首次打开时，macOS 可能要求在“系统设置 → 隐私与安全性”中确认。
 
-需要 macOS 和 Swift 6。
+## 使用要求
+
+- macOS 15 或更高版本。
+- 已通过 Codex Desktop 或 Codex CLI 登录。
+- 可以访问 `chatgpt.com`。
+
+## 使用方法
+
+启动应用后，它会读取本机现有的 Codex 登录状态并请求额度数据。菜单栏会展示服务当前返回的窗口，例如 `5h 72% · 7d 54%`；如果只有一个窗口，则只显示该窗口。
+
+- 左键菜单栏额度：刷新并打开详情面板。
+- 右键菜单栏额度：立即刷新、显示或隐藏面板、切换悬浮球、打开 Codex 用量页、设置开机启动或退出。
+- 面板右上角：刷新、切换主题、切换语言或收起为悬浮球。
+
+## 隐私与安全
+
+应用从 `~/.codex/auth.json`（或 `CODEX_HOME/auth.json`）读取已有访问令牌，并仅向 `https://chatgpt.com/backend-api/wham/...` 下的 Codex 额度与用量端点发送请求。应用不会保存访问令牌、聊天内容或原始接口响应，也没有额外遥测。
+
+请注意：本项目是非官方开源工具，与 OpenAI 没有隶属或背书关系。它依赖 Codex 当前使用的 Web 接口，接口变化可能导致功能暂时不可用。
+
+## 本地构建
+
+需要 Swift 6 和 Xcode Command Line Tools：
 
 ```bash
+swift test
 ./Scripts/build-app.sh
 open dist/CodexQuotaMenuBar.app
 ```
 
-构建产物为 `dist/CodexQuotaMenuBar.app`。打包脚本会同时生成并写入应用图标。
-
-## 安全与隐私
-
-应用只读取已有的 Codex 登录凭据（`~/.codex/auth.json` 或 `CODEX_HOME/auth.json`），并仅向 `chatgpt.com` 的 Codex 额度端点发送该登录 token。它不会保存 token、聊天内容或原始接口响应。
+构建产物位于 `dist/CodexQuotaMenuBar.app`。脚本会生成应用图标、写入 bundle 信息并执行 ad-hoc 签名。
 
 ## 常见问题
 
 ### 菜单栏没有显示额度
 
-确认已登录 Codex Desktop 或 Codex CLI，然后在菜单栏图标上右键选择“立即刷新”。若仍没有数据，请重新登录 Codex 后重试。
+确认已登录 Codex Desktop 或 Codex CLI，然后右键菜单栏额度并选择“立即刷新”。如果仍无数据，请重新登录 Codex 后重试。
 
 ### macOS 阻止打开应用
 
-该应用为本地未签名应用。请在 Finder 中按住 Control 点击应用并选择“打开”，或前往“系统设置 → 隐私与安全性”允许打开。
+确认安装包来自本仓库的 [Releases](https://github.com/jiangzenong/codex-quota-menubar/releases/latest)，然后在 Finder 中按住 Control 点击应用并选择“打开”，或前往“系统设置 → 隐私与安全性”选择“仍要打开”。
 
-### DMG 或应用提示“已损坏，无法打开”
+### 应用提示“已损坏，无法打开”
 
-如果 DMG 本身无法挂载，请删除该文件并从 [Releases](https://github.com/jiangzenong/codex-quota-menubar/releases/latest) 重新下载；不要对来源不明的 DMG 绕过系统安全检查。
-
-如果 DMG 可以正常打开、但拖入“应用程序”后的应用仍提示损坏，请先确认下载来源是本仓库 Release。然后在终端执行：
+先重新下载对应架构的 Release。如果确认文件来自本仓库，但隔离属性仍阻止启动，可执行：
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/CodexQuotaMenuBar.app
 ```
 
-再次打开应用后，如系统仍询问，请前往“系统设置 → 隐私与安全性”并选择“仍要打开”。
+不要对来源不明的应用绕过 macOS 安全检查。
 
-### Finder 仍显示通用图标
-
-重新运行 `./Scripts/build-app.sh`，并使用新生成的 `dist/CodexQuotaMenuBar.app` 替换旧文件。若 Finder 仍显示旧缓存，请关闭并重新打开对应 Finder 窗口。
-
-### 找不到 Swift 或构建失败
+### 构建时找不到 Swift
 
 安装 Xcode Command Line Tools 后重试：
 
 ```bash
 xcode-select --install
 ```
+
+## 项目状态
+
+项目仍处于早期阶段。功能反馈与可复现的错误报告欢迎通过 [Issues](https://github.com/jiangzenong/codex-quota-menubar/issues) 提交。
