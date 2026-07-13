@@ -17,6 +17,27 @@
   <img src="Assets/Screenshots/dashboard.png" width="526" alt="Codex Quota Menu Bar dashboard">
 </p>
 
+## Interface Preview
+
+### Menu Bar and Floating Orb
+
+<p align="center">
+  <img src="Assets/Screenshots/menu-bar-orb.png" width="215" alt="Codex Quota Menu Bar menu bar and floating orb">
+</p>
+
+### Light and Dark Themes
+
+<table>
+  <tr>
+    <td align="center"><strong>Light theme</strong></td>
+    <td align="center"><strong>Dark theme</strong></td>
+  </tr>
+  <tr>
+    <td><img src="Assets/Screenshots/dashboard.png" alt="Codex Quota Menu Bar light theme dashboard"></td>
+    <td><img src="Assets/Screenshots/dashboard-dark.png" alt="Codex Quota Menu Bar dark theme dashboard"></td>
+  </tr>
+</table>
+
 ## Highlights
 
 - Displays the quota windows actually returned by the service instead of assuming both 5-hour and 7-day windows are always present.
