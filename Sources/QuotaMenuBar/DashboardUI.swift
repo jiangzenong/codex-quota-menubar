@@ -70,7 +70,7 @@ enum AppLocale: String, CaseIterable {
             "dailyUsage": "每日用量", "past7Days": "近 7 天",
             "modelUsage": "模型用量", "today": "今日",
             "desktopApp": "桌面应用", "synced": "已同步",
-            "refreshing": "刷新中…", "signedOut": "未登录",
+            "refreshing": "刷新中…", "stale": "数据已过期", "signedOut": "未登录",
             "noConnection": "无连接", "restricted": "访问受限",
             "quota": "额度", "quotaReset": "额度重置", "resetUnknown": "重置时间未知",
             "manual": "手动",
@@ -85,7 +85,7 @@ enum AppLocale: String, CaseIterable {
             "dailyUsage": "Daily Usage", "past7Days": "Past 7 days",
             "modelUsage": "Model Usage", "today": "Today",
             "desktopApp": "Desktop App", "synced": "Synced",
-            "refreshing": "Refreshing…", "signedOut": "Signed Out",
+            "refreshing": "Refreshing…", "stale": "Stale Data", "signedOut": "Signed Out",
             "noConnection": "No Connection", "restricted": "Access Denied",
             "quota": "Quota", "quotaReset": "Resets", "resetUnknown": "Reset time unknown",
             "manual": "Manual",
@@ -138,42 +138,42 @@ struct WaterWave: Shape {
 struct FloatingBallView: View {
     @ObservedObject var model: QuotaModel
     @AppStorage("appTheme") private var themeSelection: String = AppTheme.dark.rawValue
-    @State private var wavePhase: CGFloat = 0
     private var theme: AppTheme { AppTheme(rawValue: themeSelection) ?? .dark }
     private var colors: AppColors { .forTheme(theme) }
     private var window: QuotaWindow? { QuotaFormatting.preferredWindow(for: model.snapshot) }
     private var percent: Double { window?.remainingPercent ?? 0 }
 
     var body: some View {
-        ZStack {
-            // Background
-            Circle().fill(colors.ballBg)
-            // Water body — fills from bottom proportional to percent
-            WaterWave(level: percent, phase: wavePhase + 40, amplitude: 2.5)
-                .fill(Accent.orange.opacity(theme == .dark ? 0.10 : 0.12))
-                .clipShape(Circle())
-            // Brighter surface layer — lower opacity, different phase
-            WaterWave(level: percent, phase: wavePhase, amplitude: 2)
-                .fill(Accent.orange.opacity(theme == .dark ? 0.22 : 0.26))
-                .clipShape(Circle())
-            VStack(spacing: 0) {
-                Text(window.map { QuotaFormatting.percentText($0.remainingPercent) } ?? "—")
-                    .font(.system(size: 19, weight: .bold, design: .monospaced))
-                    .foregroundStyle(colors.textPrimary).contentTransition(.numericText())
-                if let window, let label = QuotaFormatting.periodLabel(for: window) {
-                    Text(label).font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(colors.textSecondary)
+        TimelineView(.animation(minimumInterval: 0.025, paused: !model.isOrb)) { timeline in
+            let phase = CGFloat(timeline.date.timeIntervalSinceReferenceDate
+                .truncatingRemainder(dividingBy: 120) * 24)
+            ZStack {
+                // Background
+                Circle().fill(colors.ballBg)
+                // Water body — fills from bottom proportional to percent
+                WaterWave(level: percent, phase: phase + 40, amplitude: 2.5)
+                    .fill(Accent.orange.opacity(theme == .dark ? 0.10 : 0.12))
+                    .clipShape(Circle())
+                // Brighter surface layer — lower opacity, different phase
+                WaterWave(level: percent, phase: phase, amplitude: 2)
+                    .fill(Accent.orange.opacity(theme == .dark ? 0.22 : 0.26))
+                    .clipShape(Circle())
+                VStack(spacing: 0) {
+                    Text(window.map { QuotaFormatting.percentText($0.remainingPercent) } ?? "—")
+                        .font(.system(size: 19, weight: .bold, design: .monospaced))
+                        .foregroundStyle(colors.textPrimary).contentTransition(.numericText())
+                    if let window, let label = QuotaFormatting.periodLabel(for: window) {
+                        Text(label).font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(colors.textSecondary)
+                    }
                 }
+                // Border
+                Circle().stroke(Accent.orange, lineWidth: 2)
             }
-            // Border
-            Circle().stroke(Accent.orange, lineWidth: 2)
         }
         .frame(width: 74, height: 74)
         .clipShape(Circle())
         .contentShape(Circle())
-        .onReceive(Timer.publish(every: 0.025, on: .main, in: .common).autoconnect()) { _ in
-            wavePhase += 0.6
-        }
     }
 }
 
@@ -194,12 +194,13 @@ struct DetailView: View {
     private var quotaWindows: [QuotaWindow] { QuotaFormatting.sortedWindows(snap?.windows ?? []) }
     private var planName: String { displayPlanName(snap?.plan, locale: loc) }
 
-    private enum SyncState { case synced, refreshing, unavailable, restricted, signedOut }
+    private enum SyncState { case synced, refreshing, stale, unavailable, restricted, signedOut }
     private var syncState: SyncState {
         if model.isRefreshing { return .refreshing }
         guard let s = snap?.status else { return .unavailable }
         switch s {
-        case .ok, .stale: return .synced
+        case .ok: return .synced
+        case .stale: return .stale
         case .signedOut: return .signedOut
         case .unavailable:
             let msg = snap?.message ?? ""
@@ -209,6 +210,7 @@ struct DetailView: View {
     private var syncText: String {
         switch syncState {
         case .synced: return loc.t("synced"); case .refreshing: return loc.t("refreshing")
+        case .stale: return loc.t("stale")
         case .signedOut: return loc.t("signedOut"); case .restricted: return loc.t("restricted")
         case .unavailable: return loc.t("noConnection")
         }
@@ -217,6 +219,7 @@ struct DetailView: View {
         switch syncState {
         case .synced: return colors.syncDot
         case .refreshing: return Accent.orange
+        case .stale: return Color(hex: "E0A040")
         case .unavailable, .restricted: return Color(hex: "E05050")
         case .signedOut: return Color(hex: "E0A040")
         }
@@ -225,6 +228,7 @@ struct DetailView: View {
         switch syncState {
         case .synced: return colors.syncBg
         case .refreshing: return Accent.orange.opacity(0.15)
+        case .stale: return Color(hex: "E0A040").opacity(0.12)
         case .unavailable, .restricted: return Color(hex: "E05050").opacity(0.12)
         case .signedOut: return Color(hex: "E0A040").opacity(0.12)
         }

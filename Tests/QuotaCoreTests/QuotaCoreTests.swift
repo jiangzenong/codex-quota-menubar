@@ -30,6 +30,14 @@ final class QuotaCoreTests: XCTestCase {
         XCTAssertEqual(QuotaFormatting.preferredWindow(for: snapshot)?.id, "secondary_window")
     }
 
+    func testStaleMenuTitleIsExplicitlyMarked() {
+        let snapshot = QuotaSnapshot(plan: nil, windows: [
+            .init(id: "primary_window", remainingPercent: 75, resetsAt: nil, duration: 18_000),
+        ], resetCredits: nil, resetCreditExpirations: [], refreshedAt: .now, status: .stale, message: "Offline")
+
+        XCTAssertEqual(QuotaFormatting.menuTitle(for: snapshot), "5h 75% · Stale")
+    }
+
     func testFormatsFractionalPercentWithoutScaling() {
         XCTAssertEqual(QuotaFormatting.percentText(0.6), "0.6%")
         XCTAssertEqual(QuotaFormatting.percentText(81.25), "81.25%")
@@ -121,7 +129,7 @@ final class QuotaCoreTests: XCTestCase {
         XCTAssertEqual(try QuotaAPI.parseUsage(Data(second.utf8)).windows.map(\.id), ["long"])
     }
 
-    func testRightClickRoutesToContextMenu() {
+    func testStatusClicksRouteToPanelAndContextMenu() {
         XCTAssertEqual(StatusClickRoute.forRightMouseUp(true), .contextMenu)
         XCTAssertEqual(StatusClickRoute.forRightMouseUp(false), .detailWindow)
     }

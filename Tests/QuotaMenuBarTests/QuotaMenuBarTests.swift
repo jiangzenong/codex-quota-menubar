@@ -17,8 +17,24 @@ final class QuotaMenuBarTests: XCTestCase {
         }
     }
 
+    actor AnalyticsFetchController {
+        private var continuations: [CheckedContinuation<UsageAnalytics?, Never>] = []
+
+        func fetch() async -> UsageAnalytics? {
+            await withCheckedContinuation { continuations.append($0) }
+        }
+
+        func count() -> Int { continuations.count }
+
+        func resume(_ index: Int, with analytics: UsageAnalytics?) {
+            continuations[index].resume(returning: analytics)
+        }
+    }
+
     private func snapshot(plan: String) -> QuotaSnapshot {
-        .init(plan: plan, windows: [], resetCredits: nil, resetCreditExpirations: [],
+        .init(plan: plan, windows: [
+            .init(id: "primary_window", remainingPercent: 75, resetsAt: nil, duration: 18_000),
+        ], resetCredits: nil, resetCreditExpirations: [],
               refreshedAt: .now, status: .ok, message: nil)
     }
 
@@ -52,24 +68,78 @@ final class QuotaMenuBarTests: XCTestCase {
     }
 
     @MainActor
-    func testLatestRefreshWinsAndFailedAnalyticsClearsOldData() async {
-        let controller = QuotaFetchController()
+    func testFailedAnalyticsKeepsOldData() async {
         let oldAnalytics = UsageAnalytics(desktopCredits: [], turnDates: [], modelTurns: [], skills: [])
-        let model = QuotaModel(fetchQuota: { await controller.fetch() }, fetchAnalytics: { nil })
+        let model = QuotaModel(fetchQuota: { self.snapshot(plan: "PRO") }, fetchAnalytics: { nil })
         model.analytics = oldAnalytics
+
+        model.refresh()
+        await model.waitForRefreshForTesting()
+
+        XCTAssertEqual(model.analytics, oldAnalytics)
+    }
+
+    @MainActor
+    func testRepeatedRefreshWhileInFlightUsesSingleRequest() async {
+        let controller = QuotaFetchController()
+        let model = QuotaModel(fetchQuota: { await controller.fetch() }, fetchAnalytics: { nil })
 
         model.refresh()
         while await controller.count() < 1 { await Task.yield() }
         model.refresh()
-        while await controller.count() < 2 { await Task.yield() }
+        for _ in 0..<100 { await Task.yield() }
 
-        await controller.resume(1, with: snapshot(plan: "NEW"))
+        let requestCount = await controller.count()
+        XCTAssertEqual(requestCount, 1)
+        for index in 0..<requestCount {
+            await controller.resume(index, with: snapshot(plan: "PRO"))
+        }
         await model.waitForRefreshForTesting()
-        await controller.resume(0, with: snapshot(plan: "OLD"))
-        await Task.yield()
 
-        XCTAssertEqual(model.snapshot?.plan, "NEW")
-        XCTAssertNil(model.analytics)
+        XCTAssertEqual(model.snapshot?.plan, "PRO")
         XCTAssertFalse(model.isRefreshing)
+    }
+
+    @MainActor
+    func testQuotaPublishesBeforeAnalyticsCompletes() async {
+        let quota = QuotaFetchController()
+        let analytics = AnalyticsFetchController()
+        let model = QuotaModel(fetchQuota: { await quota.fetch() }, fetchAnalytics: { await analytics.fetch() })
+
+        model.refresh()
+        while true {
+            let quotaCount = await quota.count()
+            let analyticsCount = await analytics.count()
+            if quotaCount >= 1, analyticsCount >= 1 { break }
+            await Task.yield()
+        }
+        await quota.resume(0, with: snapshot(plan: "PRO"))
+        for _ in 0..<100 where model.snapshot == nil { await Task.yield() }
+
+        XCTAssertEqual(model.snapshot?.plan, "PRO")
+        XCTAssertTrue(model.isRefreshing)
+
+        await analytics.resume(0, with: nil)
+        await model.waitForRefreshForTesting()
+    }
+
+    @MainActor
+    func testUnavailableRefreshRetainsLastSuccessfulQuotaAsStale() async {
+        let quota = QuotaFetchController()
+        let model = QuotaModel(fetchQuota: { await quota.fetch() }, fetchAnalytics: { nil })
+
+        model.refresh()
+        while await quota.count() < 1 { await Task.yield() }
+        await quota.resume(0, with: snapshot(plan: "PRO"))
+        await model.waitForRefreshForTesting()
+
+        model.refresh()
+        while await quota.count() < 2 { await Task.yield() }
+        await quota.resume(1, with: .unavailable(message: "Network unavailable"))
+        await model.waitForRefreshForTesting()
+
+        XCTAssertEqual(model.snapshot?.plan, "PRO")
+        XCTAssertEqual(model.snapshot?.status, .stale)
+        XCTAssertEqual(model.snapshot?.message, "Network unavailable")
     }
 }
