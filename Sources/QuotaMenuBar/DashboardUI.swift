@@ -98,6 +98,17 @@ enum AppLocale: String, CaseIterable {
     ]
 }
 
+func displayPlanName(_ plan: String?, locale: AppLocale) -> String {
+    guard let plan, !plan.isEmpty else { return locale == .zh ? "套餐 —" : "Plan —" }
+    return plan
+}
+
+func modelChartHoverIndex(pointCount: Int, hoverX: CGFloat, width: CGFloat) -> Int? {
+    guard pointCount > 1, width > 0 else { return nil }
+    let position = min(max(hoverX / width, 0), 1)
+    return min(Int(position * CGFloat(pointCount - 1)), pointCount - 1)
+}
+
 // MARK: - Water Wave (fills orb from bottom, surging surface)
 
 struct WaterWave: Shape {
@@ -181,7 +192,7 @@ struct DetailView: View {
     private var loc: AppLocale { AppLocale(rawValue: localeSelection) ?? .zh }
     private var snap: QuotaSnapshot? { model.snapshot }
     private var quotaWindows: [QuotaWindow] { QuotaFormatting.sortedWindows(snap?.windows ?? []) }
-    private var planName: String { (snap?.plan ?? "").isEmpty ? "Pro" : snap!.plan! }
+    private var planName: String { displayPlanName(snap?.plan, locale: loc) }
 
     private enum SyncState { case synced, refreshing, unavailable, restricted, signedOut }
     private var syncState: SyncState {
@@ -578,17 +589,19 @@ struct ModelAreaChart: View {
                                     .stroke(accent.opacity(isHovered ? 1.0 : 0.85), lineWidth: isHovered ? 1.5 : 1)
                             }
                             // Vertical indicator
-                            if let hx = hoverX, chartW > 0 {
+                            if let hx = hoverX {
                                 Rectangle().fill(colors.textSecondary.opacity(0.3)).frame(width: 1)
                                     .position(x: hx, y: chartH/2)
                                 // Dots at intersection
-                                let idx = min(Int((hx / chartW) * CGFloat((data.first?.count ?? 2)-1)), (data.first?.count ?? 2)-2)
-                                let stepX = chartW / CGFloat((data.first?.count ?? 2)-1)
-                                ForEach(data.indices, id: \.self) { i in
-                                    let accent = Accent.seriesColors[i % Accent.seriesColors.count]
-                                    let x = stepX * CGFloat(idx)
-                                    let y = chartH * CGFloat(1 - data[i][idx])
-                                    Circle().fill(accent).frame(width: 4, height: 4).position(x: x, y: y)
+                                if let pointCount = data.first?.count,
+                                   let idx = modelChartHoverIndex(pointCount: pointCount, hoverX: hx, width: chartW) {
+                                    let stepX = chartW / CGFloat(pointCount - 1)
+                                    ForEach(data.indices, id: \.self) { i in
+                                        let accent = Accent.seriesColors[i % Accent.seriesColors.count]
+                                        let x = stepX * CGFloat(idx)
+                                        let y = chartH * CGFloat(1 - data[i][idx])
+                                        Circle().fill(accent).frame(width: 4, height: 4).position(x: x, y: y)
+                                    }
                                 }
                             }
                         }
