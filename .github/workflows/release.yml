@@ -23,7 +23,7 @@ jobs:
             runner: macos-15-intel
             artifact: CodexQuotaMenuBar-macos-intel
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: swift test
       - run: APP_VERSION="${GITHUB_REF_NAME#v}" ./Scripts/build-app.sh
       - run: ditto -c -k --sequesterRsrc --keepParent dist/CodexQuotaMenuBar.app "${{ matrix.artifact }}.zip"
@@ -35,7 +35,7 @@ jobs:
           cp -R dist/CodexQuotaMenuBar.app "$stage/Codex Quota Menu Bar/"
           ln -s /Applications "$stage/Codex Quota Menu Bar/Applications"
           hdiutil create -volname "Codex Quota Menu Bar" -srcfolder "$stage/Codex Quota Menu Bar" -ov -format UDZO "${{ matrix.artifact }}.dmg"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: |
@@ -49,7 +49,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: release-assets
           merge-multiple: true
