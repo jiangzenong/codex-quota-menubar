@@ -89,17 +89,43 @@ struct CodexQuotaMenuBarApp: App {
     @Published var isOrb = false
     @Published var isRefreshing = false
 
+    private let fetchQuota: @MainActor () async -> QuotaSnapshot
+    private let fetchAnalytics: @MainActor () async -> UsageAnalytics?
+    private var refreshTask: Task<Void, Never>?
+    private var refreshGeneration = 0
+
+    init(fetchQuota: @escaping @MainActor () async -> QuotaSnapshot = { await QuotaAPI.fetch() },
+         fetchAnalytics: @escaping @MainActor () async -> UsageAnalytics? = { await QuotaAPI.fetchAnalytics() }) {
+        self.fetchQuota = fetchQuota
+        self.fetchAnalytics = fetchAnalytics
+    }
+
     func refresh() {
+        refreshGeneration &+= 1
+        let generation = refreshGeneration
+        refreshTask?.cancel()
         isRefreshing = true
-        Task { self.snapshot = await QuotaAPI.fetch(); isRefreshing = false }
-        Task { if let a = await QuotaAPI.fetchAnalytics() { self.analytics = a } }
+        refreshTask = Task { [weak self] in
+            guard let self else { return }
+            async let nextSnapshot = fetchQuota()
+            async let nextAnalytics = fetchAnalytics()
+            let values = await (nextSnapshot, nextAnalytics)
+            guard !Task.isCancelled, generation == refreshGeneration else { return }
+            snapshot = values.0
+            analytics = values.1
+            isRefreshing = false
+        }
+    }
+
+    func waitForRefreshForTesting() async {
+        await refreshTask?.value
     }
 }
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = QuotaModel()
     private var statusItem: NSStatusItem!
-    private var detailPanel: NSPanel?
+    var detailPanel: NSPanel?
     private var orbPanel: NSPanel?
     private var subscriptions = Set<AnyCancellable>()
     private var refreshTimer: Timer?
@@ -184,23 +210,26 @@ struct CodexQuotaMenuBarApp: App {
     private func showDetail() {
         if let orb = orbPanel, orb.isVisible { orbOrigin = orb.frame.origin }
         orbPanel?.orderOut(nil)
-        if detailPanel == nil {
-            let p = makeTransparentPanel(size: detailSize)
-            p.hasShadow = true
-            let host = DraggableHostingView(rootView: DetailView(model: model, collapse: { [weak self] in
-                self?.collapseToOrb()
-            }))
-            p.contentView = host
-            detailPanel = p
-            NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: p, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.detailOrigin = self?.detailPanel?.frame.origin }
-            }
-        }
+        ensureDetailPanel()
         if let origin = detailOrigin { detailPanel?.setFrameOrigin(origin) }
         else { detailPanel?.center() }
         model.isOrb = false
         NSApp.activate(ignoringOtherApps: true)
         detailPanel?.makeKeyAndOrderFront(nil)
+    }
+
+    func ensureDetailPanel() {
+        guard detailPanel == nil else { return }
+        let p = makeTransparentPanel(size: detailSize)
+        p.hasShadow = true
+        let host = DraggableHostingView(rootView: DetailView(model: model, collapse: { [weak self] in
+            self?.collapseToOrb()
+        }))
+        p.contentView = host
+        detailPanel = p
+        NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: p, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.detailOrigin = self?.detailPanel?.frame.origin }
+        }
     }
 
     private func collapseToOrb() {
@@ -234,6 +263,7 @@ struct CodexQuotaMenuBarApp: App {
         orbOrigin = orb.frame.origin
         orb.orderOut(nil)
         model.isOrb = false
+        ensureDetailPanel()
         if let origin = detailOrigin { detailPanel?.setFrameOrigin(origin) }
         else { detailPanel?.setFrameOrigin(NSPoint(x: orb.frame.midX - detailSize.width/2, y: orb.frame.midY - detailSize.height/2)) }
         NSApp.activate(ignoringOtherApps: true)
