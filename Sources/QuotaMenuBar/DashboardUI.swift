@@ -72,7 +72,8 @@ enum AppLocale: String, CaseIterable {
             "desktopApp": "桌面应用", "synced": "已同步",
             "refreshing": "刷新中…", "signedOut": "未登录",
             "noConnection": "无连接", "restricted": "访问受限",
-            "nextRefresh": "下次刷新", "manual": "手动",
+            "quota": "额度", "quotaReset": "额度重置", "resetUnknown": "重置时间未知",
+            "manual": "手动",
             "1min": "1 分钟", "2min": "2 分钟",
             "showWindow": "显示窗口", "hideWindow": "隐藏窗口",
             "collapseOrb": "收起为悬浮球", "expandPanel": "展开详情面板", "showOrb": "显示悬浮球",
@@ -86,7 +87,8 @@ enum AppLocale: String, CaseIterable {
             "desktopApp": "Desktop App", "synced": "Synced",
             "refreshing": "Refreshing…", "signedOut": "Signed Out",
             "noConnection": "No Connection", "restricted": "Access Denied",
-            "nextRefresh": "Next refresh", "manual": "Manual",
+            "quota": "Quota", "quotaReset": "Resets", "resetUnknown": "Reset time unknown",
+            "manual": "Manual",
             "1min": "1 min", "2min": "2 min",
             "showWindow": "Show Window", "hideWindow": "Hide Window",
             "collapseOrb": "Collapse to Orb", "expandPanel": "Expand Panel", "showOrb": "Show Orb",
@@ -128,7 +130,8 @@ struct FloatingBallView: View {
     @State private var wavePhase: CGFloat = 0
     private var theme: AppTheme { AppTheme(rawValue: themeSelection) ?? .dark }
     private var colors: AppColors { .forTheme(theme) }
-    private var percent: Double { model.snapshot?.fiveHour?.remainingPercent ?? 0 }
+    private var window: QuotaWindow? { QuotaFormatting.preferredWindow(for: model.snapshot) }
+    private var percent: Double { window?.remainingPercent ?? 0 }
 
     var body: some View {
         ZStack {
@@ -142,10 +145,15 @@ struct FloatingBallView: View {
             WaterWave(level: percent, phase: wavePhase, amplitude: 2)
                 .fill(Accent.orange.opacity(theme == .dark ? 0.22 : 0.26))
                 .clipShape(Circle())
-            // Percentage text
-            Text("\(Int(percent.rounded()))%")
-                .font(.system(size: 22, weight: .bold, design: .monospaced))
-                .foregroundStyle(colors.textPrimary).contentTransition(.numericText())
+            VStack(spacing: 0) {
+                Text(window.map { QuotaFormatting.percentText($0.remainingPercent) } ?? "—")
+                    .font(.system(size: 19, weight: .bold, design: .monospaced))
+                    .foregroundStyle(colors.textPrimary).contentTransition(.numericText())
+                if let window, let label = QuotaFormatting.periodLabel(for: window) {
+                    Text(label).font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(colors.textSecondary)
+                }
+            }
             // Border
             Circle().stroke(Accent.orange, lineWidth: 2)
         }
@@ -172,8 +180,7 @@ struct DetailView: View {
     private var colors: AppColors { .forTheme(theme) }
     private var loc: AppLocale { AppLocale(rawValue: localeSelection) ?? .zh }
     private var snap: QuotaSnapshot? { model.snapshot }
-    private var fivePercent: Double { snap?.fiveHour?.remainingPercent ?? 0 }
-    private var weeklyPercent: Double { snap?.weekly?.remainingPercent ?? 0 }
+    private var quotaWindows: [QuotaWindow] { QuotaFormatting.sortedWindows(snap?.windows ?? []) }
     private var planName: String { (snap?.plan ?? "").isEmpty ? "Pro" : snap!.plan! }
 
     private enum SyncState { case synced, refreshing, unavailable, restricted, signedOut }
@@ -281,33 +288,39 @@ struct DetailView: View {
     private var quotaOverviewSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(loc.t("quotaOverview")).font(.system(size: 15, weight: .semibold)).foregroundStyle(colors.textPrimary)
-            HStack(spacing: 10) {
-                QuotaCard(percent: fivePercent, watermark: "5", accent: Accent.orange,
-                          prefix: loc.t("nextRefresh"), time: fiveHourNextTime, remaining: fiveHourRemaining, colors: colors)
-                QuotaCard(percent: weeklyPercent, watermark: "7", accent: Accent.blue,
-                          prefix: loc.t("nextRefresh"), time: weeklyNextDate, remaining: "", colors: colors)
+            if quotaWindows.isEmpty {
+                Text(loc.t("noData")).font(.system(size: 12)).foregroundStyle(colors.textSecondary)
+                    .frame(maxWidth: .infinity)
+            } else {
+                LazyVGrid(columns: quotaWindows.count == 1 ? [GridItem(.flexible())] : [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    ForEach(Array(quotaWindows.enumerated()), id: \.element.id) { index, window in
+                        QuotaCard(percent: window.remainingPercent,
+                                  percentText: QuotaFormatting.percentText(window.remainingPercent),
+                                  watermark: QuotaFormatting.periodLabel(for: window) ?? loc.t("quota"),
+                                  accent: Accent.seriesColors[index % Accent.seriesColors.count],
+                                  prefix: loc.t("quotaReset"), time: resetText(for: window),
+                                  remaining: resetRemaining(for: window), colors: colors)
+                    }
+                }
             }
         }
     }
 
-    private var fiveHourNextTime: String {
-        guard let reset = snap?.fiveHour?.resetsAt else { return "—" }
-        let f = DateFormatter(); f.dateFormat = "HH:mm"
-        return f.string(from: reset)
-    }
-
-    private var fiveHourRemaining: String {
-        guard let reset = snap?.fiveHour?.resetsAt else { return "" }
-        let secs = max(0, reset.timeIntervalSinceNow)
-        return "\(Int(secs)/3600)h \(Int(secs)%3600/60)m"
-    }
-
-    private var weeklyNextDate: String {
-        guard let reset = snap?.weekly?.resetsAt else { return "—" }
+    private func resetText(for window: QuotaWindow) -> String {
+        guard let reset = window.resetsAt else { return loc.t("resetUnknown") }
         let f = DateFormatter()
         f.locale = Locale(identifier: loc == .zh ? "zh_CN" : "en_US")
-        f.dateFormat = loc == .zh ? "M月d日" : "MMM d"
+        f.dateFormat = loc == .zh ? "M月d日 HH:mm" : "MMM d, HH:mm"
         return f.string(from: reset)
+    }
+
+    private func resetRemaining(for window: QuotaWindow) -> String {
+        guard let reset = window.resetsAt else { return "" }
+        let secs = max(0, reset.timeIntervalSinceNow)
+        if secs >= 86_400 {
+            return "\(Int(secs) / 86_400)d \(Int(secs) % 86_400 / 3_600)h"
+        }
+        return "\(Int(secs)/3600)h \(Int(secs)%3600/60)m"
     }
 
     // MARK: Auto Refresh
@@ -422,12 +435,12 @@ struct DetailView: View {
 // MARK: - Quota Card
 
 struct QuotaCard: View {
-    let percent: Double; let watermark: String; let accent: Color
+    let percent: Double; let percentText: String; let watermark: String; let accent: Color
     let prefix: String; let time: String; let remaining: String; let colors: AppColors
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top) {
-                Text("\(Int(percent.rounded()))%")
+                Text(percentText)
                     .font(.system(size: 34, weight: .semibold, design: .monospaced))
                     .foregroundStyle(accent).contentTransition(.numericText())
                 Spacer()

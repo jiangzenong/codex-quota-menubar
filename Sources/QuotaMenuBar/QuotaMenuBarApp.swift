@@ -128,7 +128,7 @@ struct CodexQuotaMenuBarApp: App {
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
         model.$snapshot.receive(on: RunLoop.main).sink { [weak self] in
-            self?.statusItem.button?.title = QuotaFormatting.menuTitle(for: $0)
+            self?.updateStatusTitle(for: $0)
         }.store(in: &subscriptions)
 
         startRefreshTimer()
@@ -265,6 +265,12 @@ struct CodexQuotaMenuBarApp: App {
     @objc private func toggleLanguage() {
         let current = UserDefaults.standard.string(forKey: "appLocale") ?? "zh"
         UserDefaults.standard.set(current == "zh" ? "en" : "zh", forKey: "appLocale")
+        updateStatusTitle(for: model.snapshot)
+    }
+
+    private func updateStatusTitle(for snapshot: QuotaSnapshot?) {
+        let isZh = (UserDefaults.standard.string(forKey: "appLocale") ?? "zh") == "zh"
+        statusItem.button?.title = QuotaFormatting.menuTitle(for: snapshot, quotaLabel: isZh ? "额度" : "Quota")
     }
 
     @objc private func openUsage() {
