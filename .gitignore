@@ -2,3 +2,18 @@
 .build/
 dist/
 .swiftpm/
+
+# Local operating-system and editor state
+.DS_Store
+.claude/
+.codex/
+.agents/
+*.log
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+
+# Private local working notes
+docs/superpowers/
