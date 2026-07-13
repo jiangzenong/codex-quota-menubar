@@ -30,12 +30,21 @@ final class QuotaCoreTests: XCTestCase {
         XCTAssertEqual(QuotaFormatting.preferredWindow(for: snapshot)?.id, "secondary_window")
     }
 
-    func testStaleMenuTitleIsExplicitlyMarked() {
+    func testStaleMenuTitleUsesQuotaWithoutSuffix() {
         let snapshot = QuotaSnapshot(plan: nil, windows: [
             .init(id: "primary_window", remainingPercent: 75, resetsAt: nil, duration: 18_000),
         ], resetCredits: nil, resetCreditExpirations: [], refreshedAt: .now, status: .stale, message: "Offline")
 
-        XCTAssertEqual(QuotaFormatting.menuTitle(for: snapshot), "5h 75% · Stale")
+        XCTAssertEqual(QuotaFormatting.menuTitle(for: snapshot), "5h 75%")
+    }
+
+    func testMenuTitleDistinguishesLoadingUnavailableAndSignedOut() {
+        let signedOut = QuotaSnapshot(plan: nil, windows: [], resetCredits: nil, resetCreditExpirations: [],
+                                      refreshedAt: .now, status: .signedOut, message: nil)
+
+        XCTAssertEqual(QuotaFormatting.menuTitle(for: nil), "数据加载中...")
+        XCTAssertEqual(QuotaFormatting.menuTitle(for: .unavailable(message: "Offline")), "数据暂不可用")
+        XCTAssertEqual(QuotaFormatting.menuTitle(for: signedOut), "请登录 Codex")
     }
 
     func testFormatsFractionalPercentWithoutScaling() {
@@ -55,7 +64,7 @@ final class QuotaCoreTests: XCTestCase {
         XCTAssertNil(QuotaFormatting.periodLabel(for: window))
         XCTAssertEqual(QuotaFormatting.menuTitle(for: snapshot), "额度 81.25%")
         XCTAssertEqual(QuotaFormatting.menuTitle(for: snapshot, quotaLabel: "Quota"), "Quota 81.25%")
-        XCTAssertEqual(QuotaFormatting.menuTitle(for: nil), "额度 —")
+        XCTAssertEqual(QuotaFormatting.menuTitle(for: nil), "数据加载中...")
     }
 
     func testParsesSingleWeeklyWindowFromPrimarySlot() throws {

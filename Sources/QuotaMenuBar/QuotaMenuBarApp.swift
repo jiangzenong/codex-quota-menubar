@@ -147,6 +147,7 @@ struct CodexQuotaMenuBarApp: App {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        installApplicationMenu()
 
         if UserDefaults.standard.object(forKey: "appTheme") == nil {
             let isDark = NSApp.effectiveAppearance.name == .darkAqua || NSApp.effectiveAppearance.name == .vibrantDark
@@ -180,6 +181,20 @@ struct CodexQuotaMenuBarApp: App {
     }
 
     // MARK: - Menu
+
+    @objc func installApplicationMenu() {
+        let mainMenu = NSMenu()
+        let applicationItem = NSMenuItem()
+        let applicationMenu = NSMenu()
+        let isZh = (UserDefaults.standard.string(forKey: "appLocale") ?? "zh") == "zh"
+        let quitItem = NSMenuItem(title: Loc(isZh).t("quit"), action: #selector(quit), keyEquivalent: "q")
+        quitItem.keyEquivalentModifierMask = [.command]
+        quitItem.target = self
+        applicationMenu.addItem(quitItem)
+        applicationItem.submenu = applicationMenu
+        mainMenu.addItem(applicationItem)
+        NSApp.mainMenu = mainMenu
+    }
 
     @objc private func statusClicked() {
         let route = StatusClickRoute.forRightMouseUp(NSApp.currentEvent?.type == .rightMouseUp)
@@ -309,7 +324,11 @@ struct CodexQuotaMenuBarApp: App {
     private func updateStatusTitle(for snapshot: QuotaSnapshot?) {
         let isZh = (UserDefaults.standard.string(forKey: "appLocale") ?? "zh") == "zh"
         statusItem.button?.title = QuotaFormatting.menuTitle(
-            for: snapshot, quotaLabel: isZh ? "额度" : "Quota", staleLabel: isZh ? "数据过期" : "Stale")
+            for: snapshot,
+            quotaLabel: isZh ? "额度" : "Quota",
+            loadingLabel: isZh ? "数据加载中..." : "Loading data...",
+            unavailableLabel: isZh ? "数据暂不可用" : "Data unavailable",
+            signedOutLabel: isZh ? "请登录 Codex" : "Sign in to Codex")
     }
 
     @objc private func openUsage() {
