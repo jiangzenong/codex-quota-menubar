@@ -29,6 +29,14 @@ enum Accent {
     static let seriesColors: [Color] = [.orange, .blue, .green, .purple]
 }
 
+enum SurfaceLayout {
+    static let outerPadding: CGFloat = 16
+    static let sectionSpacing: CGFloat = 12
+    static let contentSpacing: CGFloat = 10
+    static let controlSize: CGFloat = 32
+    static let popoverWidth: CGFloat = 360
+}
+
 // MARK: - Theme
 
 enum AppTheme: String, CaseIterable { case dark, light }
@@ -76,7 +84,8 @@ enum AppLocale: String, CaseIterable {
             "manual": "手动",
             "1min": "1 分钟", "2min": "2 分钟",
             "showWindow": "显示窗口", "hideWindow": "隐藏窗口",
-            "collapseOrb": "收起为悬浮球", "expandPanel": "展开详情面板", "showOrb": "显示悬浮球",
+            "closePanel": "关闭详情面板", "showOrb": "显示悬浮球", "hideOrb": "隐藏悬浮球",
+            "openDetail": "打开完整详情", "quickActions": "快捷操作",
             "openUsage": "打开 Codex 用量", "launchAtLogin": "开机启动",
             "quit": "退出", "refreshNow": "立即刷新", "noData": "暂无数据",
         ],
@@ -91,7 +100,8 @@ enum AppLocale: String, CaseIterable {
             "manual": "Manual",
             "1min": "1 min", "2min": "2 min",
             "showWindow": "Show Window", "hideWindow": "Hide Window",
-            "collapseOrb": "Collapse to Orb", "expandPanel": "Expand Panel", "showOrb": "Show Orb",
+            "closePanel": "Close Details", "showOrb": "Show Orb", "hideOrb": "Hide Orb",
+            "openDetail": "Open Full Details", "quickActions": "Quick Actions",
             "openUsage": "Open Codex Usage", "launchAtLogin": "Launch at Login",
             "quit": "Quit", "refreshNow": "Refresh Now", "noData": "No data",
         ],
@@ -107,6 +117,19 @@ func modelChartHoverIndex(pointCount: Int, hoverX: CGFloat, width: CGFloat) -> I
     guard pointCount > 1, width > 0 else { return nil }
     let position = min(max(hoverX / width, 0), 1)
     return min(Int(position * CGFloat(pointCount - 1)), pointCount - 1)
+}
+
+enum OrbAction: Equatable {
+    case openDetail
+    case closeOrb
+}
+
+let orbDiameter: CGFloat = 74
+let orbCanvasInset: CGFloat = 4
+let orbCanvasSize = orbDiameter + orbCanvasInset * 2
+
+func orbAction(forCloseButton: Bool) -> OrbAction {
+    forCloseButton ? .closeOrb : .openDetail
 }
 
 // MARK: - Water Wave (fills orb from bottom, surging surface)
@@ -137,43 +160,63 @@ struct WaterWave: Shape {
 
 struct FloatingBallView: View {
     @ObservedObject var model: QuotaModel
+    let onAction: (OrbAction) -> Void
     @AppStorage("appTheme") private var themeSelection: String = AppTheme.dark.rawValue
+    @State private var isHovered = false
     private var theme: AppTheme { AppTheme(rawValue: themeSelection) ?? .dark }
     private var colors: AppColors { .forTheme(theme) }
     private var window: QuotaWindow? { QuotaFormatting.preferredWindow(for: model.snapshot) }
     private var percent: Double { window?.remainingPercent ?? 0 }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.025, paused: !model.isOrb)) { timeline in
-            let phase = CGFloat(timeline.date.timeIntervalSinceReferenceDate
-                .truncatingRemainder(dividingBy: 120) * 24)
-            ZStack {
-                // Background
-                Circle().fill(colors.ballBg)
-                // Water body — fills from bottom proportional to percent
-                WaterWave(level: percent, phase: phase + 40, amplitude: 2.5)
-                    .fill(Accent.orange.opacity(theme == .dark ? 0.10 : 0.12))
-                    .clipShape(Circle())
-                // Brighter surface layer — lower opacity, different phase
-                WaterWave(level: percent, phase: phase, amplitude: 2)
-                    .fill(Accent.orange.opacity(theme == .dark ? 0.22 : 0.26))
-                    .clipShape(Circle())
-                VStack(spacing: 0) {
-                    Text(window.map { QuotaFormatting.percentText($0.remainingPercent) } ?? "—")
-                        .font(.system(size: 19, weight: .bold, design: .monospaced))
-                        .foregroundStyle(colors.textPrimary).contentTransition(.numericText())
-                    if let window, let label = QuotaFormatting.periodLabel(for: window) {
-                        Text(label).font(.system(size: 10, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(colors.textSecondary)
+        ZStack(alignment: .topTrailing) {
+            TimelineView(.animation(minimumInterval: 0.025, paused: !model.isOrb)) { timeline in
+                let phase = CGFloat(timeline.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: 120) * 24)
+                ZStack {
+                    Circle().fill(colors.ballBg)
+                    WaterWave(level: percent, phase: phase + 40, amplitude: 2.5)
+                        .fill(Accent.orange.opacity(theme == .dark ? 0.10 : 0.12))
+                        .clipShape(Circle())
+                    WaterWave(level: percent, phase: phase, amplitude: 2)
+                        .fill(Accent.orange.opacity(theme == .dark ? 0.22 : 0.26))
+                        .clipShape(Circle())
+                    VStack(spacing: 0) {
+                        Text(window.map { QuotaFormatting.percentText($0.remainingPercent) } ?? "—")
+                            .font(.system(size: 19, weight: .bold, design: .monospaced))
+                            .foregroundStyle(colors.textPrimary).contentTransition(.numericText())
+                        if let window, let label = QuotaFormatting.periodLabel(for: window) {
+                            Text(label).font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(colors.textSecondary)
+                        }
                     }
+                    Circle().stroke(Accent.orange, lineWidth: 2)
                 }
-                // Border
-                Circle().stroke(Accent.orange, lineWidth: 2)
+            }
+            .contentShape(Circle())
+            .onTapGesture { onAction(orbAction(forCloseButton: false)) }
+
+            if isHovered {
+                Button {
+                    onAction(orbAction(forCloseButton: true))
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .frame(width: 18, height: 18)
+                        .background(Circle().fill(Color.black.opacity(0.68)))
+                }
+                .buttonStyle(.plain)
+                .help("Close Orb")
+                .padding(2)
+                .transition(.opacity.combined(with: .scale(scale: 0.85)))
             }
         }
-        .frame(width: 74, height: 74)
-        .clipShape(Circle())
-        .contentShape(Circle())
+        .frame(width: orbDiameter, height: orbDiameter)
+        .padding(orbCanvasInset)
+        .onHover { inside in
+            withAnimation(.easeOut(duration: 0.12)) { isHovered = inside }
+        }
     }
 }
 
@@ -181,7 +224,8 @@ struct FloatingBallView: View {
 
 struct DetailView: View {
     @ObservedObject var model: QuotaModel
-    let collapse: () -> Void
+    let close: () -> Void
+    let toggleOrb: () -> Void
     @AppStorage("appTheme") private var themeSelection: String = AppTheme.dark.rawValue
     @AppStorage("appLocale") private var localeSelection: String = AppLocale.zh.rawValue
     @AppStorage("refreshInterval") private var refreshSelection: String = "60"
@@ -235,11 +279,11 @@ struct DetailView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SurfaceLayout.sectionSpacing) {
             header; quotaOverviewSection; autoRefreshSection
             dailyUsageSection; modelUsageSection
         }
-        .padding(16)
+        .padding(SurfaceLayout.outerPadding)
         .frame(width: 480)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(colors.bg))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(colors.popoverBorder, lineWidth: 1))
@@ -257,7 +301,8 @@ struct DetailView: View {
                     themeSelection = (theme == .dark ? AppTheme.light : AppTheme.dark).rawValue
                 }
                 langButton
-                iconButton("minus", id: "collapse") { collapse() }
+                iconButton(model.isOrb ? "circle.slash" : "circle.dotted", id: "orb") { toggleOrb() }
+                iconButton("xmark", id: "close") { close() }
             }
         }
     }
@@ -281,7 +326,8 @@ struct DetailView: View {
     private var langButton: some View {
         Button(action: { localeSelection = loc.next.rawValue }) {
             Text(loc.label).font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(colors.textPrimary).frame(width: 32, height: 32)
+                .foregroundStyle(colors.textPrimary)
+                .frame(width: SurfaceLayout.controlSize, height: SurfaceLayout.controlSize)
                 .background(RoundedRectangle(cornerRadius: 8).fill(colors.buttonBg))
         }.buttonStyle(.plain)
     }
@@ -289,7 +335,8 @@ struct DetailView: View {
     private func iconButton(_ systemName: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName).font(.system(size: 14, weight: .medium))
-                .foregroundStyle(colors.textPrimary).frame(width: 32, height: 32)
+                .foregroundStyle(colors.textPrimary)
+                .frame(width: SurfaceLayout.controlSize, height: SurfaceLayout.controlSize)
                 .background(RoundedRectangle(cornerRadius: 8)
                     .fill(colors.buttonBg).overlay(RoundedRectangle(cornerRadius: 8)
                         .fill(Color.white.opacity(hoveringButton == id ? 0.08 : 0))))
@@ -301,13 +348,13 @@ struct DetailView: View {
     // MARK: Quota Overview
 
     private var quotaOverviewSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SurfaceLayout.contentSpacing) {
             Text(loc.t("quotaOverview")).font(.system(size: 15, weight: .semibold)).foregroundStyle(colors.textPrimary)
             if quotaWindows.isEmpty {
                 Text(loc.t("noData")).font(.system(size: 12)).foregroundStyle(colors.textSecondary)
                     .frame(maxWidth: .infinity)
             } else {
-                LazyVGrid(columns: quotaWindows.count == 1 ? [GridItem(.flexible())] : [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                LazyVGrid(columns: quotaWindows.count == 1 ? [GridItem(.flexible())] : [GridItem(.flexible()), GridItem(.flexible())], spacing: SurfaceLayout.contentSpacing) {
                     ForEach(Array(quotaWindows.enumerated()), id: \.element.id) { index, window in
                         QuotaCard(percent: window.remainingPercent,
                                   percentText: QuotaFormatting.percentText(window.remainingPercent),
@@ -341,7 +388,7 @@ struct DetailView: View {
     // MARK: Auto Refresh
 
     private var autoRefreshSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SurfaceLayout.contentSpacing) {
             HStack {
                 Text(loc.t("autoRefresh")).font(.system(size: 15, weight: .semibold)).foregroundStyle(colors.textPrimary)
                 Spacer()
@@ -371,7 +418,7 @@ struct DetailView: View {
     // MARK: Daily Usage
 
     private var dailyUsageSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SurfaceLayout.contentSpacing) {
             HStack {
                 Text(loc.t("dailyUsage")).font(.system(size: 15, weight: .semibold)).foregroundStyle(colors.textPrimary)
                 Spacer()
@@ -404,7 +451,7 @@ struct DetailView: View {
     // MARK: Model Usage
 
     private var modelUsageSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SurfaceLayout.contentSpacing) {
             HStack {
                 Text(loc.t("modelUsage")).font(.system(size: 15, weight: .semibold)).foregroundStyle(colors.textPrimary)
                 Spacer()
@@ -481,7 +528,7 @@ struct QuotaCard: View {
                 }
             }
         }
-        .padding(10)
+        .padding(SurfaceLayout.contentSpacing)
         .background(RoundedRectangle(cornerRadius: 10).fill(colors.cardBg))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(accent.opacity(0.25), lineWidth: 1.5))
     }
