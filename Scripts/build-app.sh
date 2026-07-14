@@ -3,7 +3,7 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
-app_version=${APP_VERSION:-0.1.6}
+app_version=${APP_VERSION:-0.1.9}
 build_number=${BUILD_NUMBER:-1}
 swift build -c release
 app="$root/dist/CodexQuotaMenuBar.app"

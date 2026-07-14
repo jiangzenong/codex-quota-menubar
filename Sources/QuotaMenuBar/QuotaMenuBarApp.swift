@@ -7,8 +7,6 @@ import QuotaCore
 // MARK: - Draggable NSHostingView
 
 private class DraggableHostingView<Content: View>: NSHostingView<Content> {
-    var onTap: (() -> Void)?
-
     private var mouseDownScreen: NSPoint?
     private var windowStartOrigin: NSPoint?
     private var hasDragged = false
@@ -30,10 +28,6 @@ private class DraggableHostingView<Content: View>: NSHostingView<Content> {
 
     override func mouseUp(with event: NSEvent) {
         super.mouseUp(with: event)
-        if !hasDragged {
-            let down = mouseDownScreen ?? NSEvent.mouseLocation
-            if hypot(NSEvent.mouseLocation.x - down.x, NSEvent.mouseLocation.y - down.y) < 4 { onTap?() }
-        }
         mouseDownScreen = nil; windowStartOrigin = nil; hasDragged = false
     }
 }
@@ -41,16 +35,53 @@ private class DraggableHostingView<Content: View>: NSHostingView<Content> {
 // MARK: - Helpers
 
 @MainActor
-private func makeTransparentPanel(size: NSSize) -> NSPanel {
+enum SurfacePanelRole {
+    case detail
+    case orb
+}
+
+enum StatusPopoverDismissTrigger: Equatable {
+    case outsideClick
+    case escape
+    case applicationSwitch
+    case rightClick
+    case detailsAction
+    case internalRefresh
+}
+
+func shouldCloseStatusPopover(for trigger: StatusPopoverDismissTrigger) -> Bool {
+    trigger != .internalRefresh
+}
+
+@MainActor
+func prepareStatusPopoverWindow(
+    _ window: NSWindow,
+    activateApplication: () -> Void = { NSApp.activate(ignoringOtherApps: true) }
+) {
+    activateApplication()
+    window.level = .statusBar
+    window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
+    window.makeKey()
+}
+
+@MainActor
+func makeTransparentPanel(size: NSSize, role: SurfacePanelRole) -> NSPanel {
     let p = NSPanel(contentRect: .init(origin: .zero, size: size),
                     styleMask: [.borderless, .nonactivatingPanel],
                     backing: .buffered, defer: false)
-    p.isFloatingPanel = true
-    p.level = .floating
     p.isOpaque = false
     p.backgroundColor = .clear
     p.hidesOnDeactivate = false
-    p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+    switch role {
+    case .detail:
+        p.isFloatingPanel = false
+        p.level = .normal
+        p.collectionBehavior = [.fullScreenAuxiliary]
+    case .orb:
+        p.isFloatingPanel = true
+        p.level = .floating
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+    }
     return p
 }
 
@@ -63,9 +94,8 @@ private struct Loc {
         case "refreshNow": return zh ? "立即刷新" : "Refresh Now"
         case "showWindow": return zh ? "显示窗口" : "Show Window"
         case "hideWindow": return zh ? "隐藏窗口" : "Hide Window"
-        case "collapseOrb": return zh ? "收起为悬浮球" : "Collapse to Orb"
-        case "expandPanel": return zh ? "展开详情面板" : "Expand Panel"
         case "showOrb": return zh ? "显示悬浮球" : "Show Orb"
+        case "hideOrb": return zh ? "隐藏悬浮球" : "Hide Orb"
         case "openUsage": return zh ? "打开 Codex 用量" : "Open Codex Usage"
         case "launchAtLogin": return zh ? "开机启动" : "Launch at Login"
         case "quit": return zh ? "退出" : "Quit"
@@ -81,6 +111,21 @@ private struct Loc {
 struct CodexQuotaMenuBarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     var body: some Scene { Settings { EmptyView() } }
+}
+
+enum QuotaRefreshTrigger {
+    case applicationLaunch
+    case timer
+    case manual
+    case popoverPresentation
+    case detailPresentation
+
+    var requestsRefresh: Bool {
+        switch self {
+        case .applicationLaunch, .timer, .manual: true
+        case .popoverPresentation, .detailPresentation: false
+        }
+    }
 }
 
 @MainActor final class QuotaModel: ObservableObject {
@@ -99,7 +144,8 @@ struct CodexQuotaMenuBarApp: App {
         self.fetchAnalytics = fetchAnalytics
     }
 
-    func refresh() {
+    func refresh(trigger: QuotaRefreshTrigger = .manual) {
+        guard trigger.requestsRefresh else { return }
         guard !isRefreshing else { return }
         isRefreshing = true
         refreshTask = Task { [weak self] in
@@ -130,16 +176,19 @@ struct CodexQuotaMenuBarApp: App {
     }
 }
 
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let model = QuotaModel()
     private var statusItem: NSStatusItem!
+    private(set) var statusPopover: NSPopover?
     var detailPanel: NSPanel?
-    private var orbPanel: NSPanel?
+    private(set) var orbPanel: NSPanel?
     private var subscriptions = Set<AnyCancellable>()
     private var refreshTimer: Timer?
+    private var statusPopoverEventMonitors: [Any] = []
+    private var statusPopoverActivationObserver: NSObjectProtocol?
 
     private let detailSize = NSSize(width: 512, height: 740)
-    private let orbSize    = NSSize(width: 74, height: 74)
+    private let orbSize    = NSSize(width: orbCanvasSize, height: orbCanvasSize)
     private var detailOrigin: NSPoint?
     private var orbOrigin: NSPoint?
 
@@ -164,11 +213,14 @@ struct CodexQuotaMenuBarApp: App {
 
         model.$snapshot.receive(on: RunLoop.main).sink { [weak self] in
             self?.updateStatusTitle(for: $0)
+            self?.updateStatusPopoverSize()
         }.store(in: &subscriptions)
 
+        prewarmStatusPopover()
+        showInitialSurfaces()
         startRefreshTimer()
         AppDelegate.refreshTimerDidChange = { [weak self] in self?.startRefreshTimer() }
-        model.refresh()
+        model.refresh(trigger: .applicationLaunch)
     }
 
     private func startRefreshTimer() {
@@ -176,7 +228,7 @@ struct CodexQuotaMenuBarApp: App {
         let secs = TimeInterval(Int(UserDefaults.standard.string(forKey: "refreshInterval") ?? "60") ?? 60)
         guard secs > 0 else { return }
         refreshTimer = Timer.scheduledTimer(withTimeInterval: secs, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.model.refresh() }
+            Task { @MainActor in self?.model.refresh(trigger: .timer) }
         }
     }
 
@@ -198,17 +250,14 @@ struct CodexQuotaMenuBarApp: App {
 
     @objc private func statusClicked() {
         let route = StatusClickRoute.forRightMouseUp(NSApp.currentEvent?.type == .rightMouseUp)
-        if route == .detailWindow { togglePanel(); return }
+        if route == .statusPopover { toggleStatusPopover(); return }
+        if shouldCloseStatusPopover(for: .rightClick) { closeStatusPopover() }
         let isZh = (UserDefaults.standard.string(forKey: "appLocale") ?? "zh") == "zh"
         let l = Loc(isZh)
         let menu = NSMenu()
         menu.addItem(withTitle: l.t("refreshNow"), action: #selector(refresh), keyEquivalent: "")
         menu.addItem(withTitle: detailPanel?.isVisible == true ? l.t("hideWindow") : l.t("showWindow"), action: #selector(togglePanel), keyEquivalent: "")
-        let orbLabel: String = {
-            if orbPanel?.isVisible == true { return l.t("expandPanel") }
-            if detailPanel?.isVisible == true { return l.t("collapseOrb") }
-            return l.t("showOrb")
-        }()
+        let orbLabel = orbPanel?.isVisible == true ? l.t("hideOrb") : l.t("showOrb")
         menu.addItem(withTitle: orbLabel, action: #selector(toggleOrb), keyEquivalent: "")
         menu.addItem(withTitle: l.t("openUsage"), action: #selector(openUsage), keyEquivalent: "")
         menu.addItem(withTitle: l.t("switchLang"), action: #selector(toggleLanguage), keyEquivalent: "")
@@ -221,33 +270,145 @@ struct CodexQuotaMenuBarApp: App {
         statusItem.menu = nil
     }
 
-    @objc private func refresh() { model.refresh() }
+    @objc private func refresh() { model.refresh(trigger: .manual) }
+
+    func ensureStatusPopover() {
+        guard statusPopover == nil else { return }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = true
+        popover.delegate = self
+        let controller = NSHostingController(rootView: StatusPopoverView(
+            model: model,
+            openDetail: { [weak self] in
+                if shouldCloseStatusPopover(for: .detailsAction) { self?.closeStatusPopover() }
+                self?.showDetail()
+            }
+        ))
+        popover.contentViewController = controller
+        popover.contentSize = statusPopoverContentSize(for: controller)
+        statusPopover = popover
+    }
+
+    func prewarmStatusPopover() {
+        ensureStatusPopover()
+    }
+
+    private func toggleStatusPopover() {
+        ensureStatusPopover()
+        guard let popover = statusPopover else { return }
+        if popover.isShown {
+            closeStatusPopover()
+            return
+        }
+        guard let button = statusItem?.button else { return }
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        configureStatusPopoverWindow()
+        installStatusPopoverDismissalObservers()
+    }
+
+    private func configureStatusPopoverWindow() {
+        guard let window = statusPopover?.contentViewController?.view.window else { return }
+        prepareStatusPopoverWindow(window)
+    }
+
+    private func updateStatusPopoverSize() {
+        guard let controller = statusPopover?.contentViewController as? NSHostingController<StatusPopoverView> else { return }
+        statusPopover?.contentSize = statusPopoverContentSize(for: controller)
+    }
+
+    private func installStatusPopoverDismissalObservers() {
+        removeStatusPopoverDismissalObservers()
+
+        if let local = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .keyDown],
+            handler: { @MainActor [weak self] event in
+                guard let self, self.statusPopover?.isShown == true else { return event }
+                if event.type == .keyDown, event.keyCode == 53 {
+                    if shouldCloseStatusPopover(for: .escape) { self.closeStatusPopover() }
+                    return nil
+                }
+                let popoverWindow = self.statusPopover?.contentViewController?.view.window
+                let statusWindow = self.statusItem?.button?.window
+                if event.window !== popoverWindow, event.window !== statusWindow,
+                   shouldCloseStatusPopover(for: .outsideClick) {
+                    self.closeStatusPopover()
+                }
+                return event
+            }
+        ) {
+            statusPopoverEventMonitors.append(local)
+        }
+
+        if let global = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown],
+            handler: { @MainActor [weak self] _ in
+                if shouldCloseStatusPopover(for: .outsideClick) { self?.closeStatusPopover() }
+            }
+        ) {
+            statusPopoverEventMonitors.append(global)
+        }
+
+        statusPopoverActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let processIdentifier = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier
+            guard processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+            Task { @MainActor [weak self] in
+                if shouldCloseStatusPopover(for: .applicationSwitch) { self?.closeStatusPopover() }
+            }
+        }
+    }
+
+    private func removeStatusPopoverDismissalObservers() {
+        statusPopoverEventMonitors.forEach(NSEvent.removeMonitor)
+        statusPopoverEventMonitors.removeAll()
+        if let observer = statusPopoverActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            statusPopoverActivationObserver = nil
+        }
+    }
+
+    private func closeStatusPopover() {
+        statusPopover?.performClose(nil)
+        removeStatusPopoverDismissalObservers()
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        removeStatusPopoverDismissalObservers()
+    }
 
     // MARK: - Panel Management
 
     @objc private func togglePanel() {
-        if detailPanel?.isVisible == true { hideAll(); return }
+        if detailPanel?.isVisible == true { hideDetail(); return }
         showDetail()
     }
 
-    private func showDetail() {
-        if let orb = orbPanel, orb.isVisible { orbOrigin = orb.frame.origin }
-        orbPanel?.orderOut(nil)
+    func showDetail() {
         ensureDetailPanel()
         if let origin = detailOrigin { detailPanel?.setFrameOrigin(origin) }
         else { detailPanel?.center() }
-        model.isOrb = false
         NSApp.activate(ignoringOtherApps: true)
         detailPanel?.makeKeyAndOrderFront(nil)
     }
 
+    func hideDetail() {
+        if let detail = detailPanel, detail.isVisible { detailOrigin = detail.frame.origin }
+        detailPanel?.orderOut(nil)
+    }
+
     func ensureDetailPanel() {
         guard detailPanel == nil else { return }
-        let p = makeTransparentPanel(size: detailSize)
+        let p = makeTransparentPanel(size: detailSize, role: .detail)
         p.hasShadow = true
-        let host = DraggableHostingView(rootView: DetailView(model: model, collapse: { [weak self] in
-            self?.collapseToOrb()
-        }))
+        let host = DraggableHostingView(rootView: DetailView(
+            model: model,
+            close: { [weak self] in self?.hideDetail() },
+            toggleOrb: { [weak self] in self?.toggleOrb() }
+        ))
         p.contentView = host
         detailPanel = p
         NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: p, queue: .main) { [weak self] _ in
@@ -255,21 +416,17 @@ struct CodexQuotaMenuBarApp: App {
         }
     }
 
-    private func collapseToOrb() {
-        guard let detail = detailPanel, detail.isVisible else { return }
-        detailOrigin = detail.frame.origin
-        detail.orderOut(nil)
-        let target = orbOrigin ?? NSPoint(x: detail.frame.midX - orbSize.width/2, y: detail.frame.midY - orbSize.height/2)
-        showOrb(at: target)
-    }
-
     private func showOrb(at origin: NSPoint) {
         if orbPanel == nil {
-            let p = makeTransparentPanel(size: orbSize)
+            let p = makeTransparentPanel(size: orbSize, role: .orb)
             p.hasShadow = true
-            let host = DraggableHostingView(rootView: FloatingBallView(model: model))
+            let host = DraggableHostingView(rootView: FloatingBallView(model: model) { [weak self] action in
+                switch action {
+                case .openDetail: self?.showDetail()
+                case .closeOrb: self?.hideOrb()
+                }
+            })
             host.wantsLayer = true; host.layer?.backgroundColor = CGColor.clear
-            host.onTap = { [weak self] in self?.expandFromOrb() }
             p.contentView = host
             orbPanel = p
             NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: p, queue: .main) { [weak self] _ in
@@ -281,36 +438,28 @@ struct CodexQuotaMenuBarApp: App {
         orbPanel?.makeKeyAndOrderFront(nil)
     }
 
-    private func expandFromOrb() {
-        guard let orb = orbPanel, orb.isVisible else { return }
-        orbOrigin = orb.frame.origin
-        orb.orderOut(nil)
+    func showOrb() {
+        if orbPanel?.isVisible == true { return }
+        let origin = orbOrigin ?? NSPoint(
+            x: (NSScreen.main?.frame.midX ?? 400) - orbSize.width / 2,
+            y: (NSScreen.main?.frame.midY ?? 400) - orbSize.height / 2
+        )
+        showOrb(at: origin)
+    }
+
+    func showInitialSurfaces() {
+        showOrb()
+    }
+
+    func hideOrb() {
+        if let orb = orbPanel, orb.isVisible { orbOrigin = orb.frame.origin }
+        orbPanel?.orderOut(nil)
         model.isOrb = false
-        ensureDetailPanel()
-        if let origin = detailOrigin { detailPanel?.setFrameOrigin(origin) }
-        else { detailPanel?.setFrameOrigin(NSPoint(x: orb.frame.midX - detailSize.width/2, y: orb.frame.midY - detailSize.height/2)) }
-        NSApp.activate(ignoringOtherApps: true)
-        detailPanel?.makeKeyAndOrderFront(nil)
     }
 
     @objc private func toggleOrb() {
-        if orbPanel?.isVisible == true {
-            expandFromOrb()
-        } else if detailPanel?.isVisible == true {
-            collapseToOrb()
-        } else {
-            // Neither visible — show orb at saved position or screen center
-            let origin = orbOrigin ?? NSPoint(
-                x: (NSScreen.main?.frame.midX ?? 400) - orbSize.width/2,
-                y: (NSScreen.main?.frame.midY ?? 400) - orbSize.height/2)
-            showOrb(at: origin)
-        }
-    }
-
-    private func hideAll() {
-        detailPanel?.orderOut(nil)
-        orbPanel?.orderOut(nil)
-        model.isOrb = false
+        if orbPanel?.isVisible == true { hideOrb() }
+        else { showOrb() }
     }
 
     // MARK: - Actions

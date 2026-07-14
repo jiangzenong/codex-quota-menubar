@@ -43,8 +43,8 @@
 - Displays the quota windows actually returned by the service instead of assuming both 5-hour and 7-day windows are always present.
 - Shows the plan, remaining quota, reset time, daily usage, and recent model usage trends in one panel.
 - Supports 30-second, 1-minute, 2-minute, and manual refresh modes.
-- Offers a draggable detail panel, compact floating orb, light/dark themes, and Chinese/English UI.
-- Left-click the menu bar quota to refresh and open the panel; right-click for the complete action menu.
+- Lets the detail panel and floating orb remain visible independently; the panel uses a normal window level, while the draggable orb exposes a close control on hover.
+- Left-click the menu bar quota to open the quota popover; right-click for the complete action menu.
 - Can launch at login and reuses your existing Codex sign-in without asking for another password.
 
 ## Download
@@ -67,9 +67,11 @@ Current release artifacts are ad-hoc signed and are not notarized with an Apple 
 
 On launch, the app reads your existing local Codex sign-in state and requests quota data. The menu bar reflects the windows currently returned by the service, such as `5h 72% · 7d 54%`; if only one window exists, only that window is shown.
 
-- Left-click the menu bar quota to refresh and open the detail panel.
+- The floating orb is shown by default at launch. After you close it, automatic refreshes do not show it again during that app run.
+- Left-click the menu bar quota to open a compact popover with quota and reset information or a link to full details. It closes when you click elsewhere, switch apps, or press Esc.
 - Right-click it to refresh, show or hide the panel, toggle the floating orb, open Codex Usage, manage launch at login, or quit.
-- Use the controls in the panel header to refresh, change theme or language, or collapse to the orb.
+- Use the panel header to refresh, change theme or language, independently show or hide the orb, or close the detail panel.
+- Click the orb to open or focus the detail panel without hiding the orb; hover over it to reveal its own close button.
 
 ## Privacy and security
 

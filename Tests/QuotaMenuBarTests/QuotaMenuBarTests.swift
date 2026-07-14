@@ -1,6 +1,16 @@
 import XCTest
 @testable import QuotaMenuBar
 import QuotaCore
+import SwiftUI
+
+@MainActor
+private final class KeyTrackingWindow: NSWindow {
+    private(set) var didRequestKey = false
+
+    override func makeKey() {
+        didRequestKey = true
+    }
+}
 
 final class QuotaMenuBarTests: XCTestCase {
     actor QuotaFetchController {
@@ -68,6 +78,149 @@ final class QuotaMenuBarTests: XCTestCase {
     }
 
     @MainActor
+    func testDetailAndOrbUseIndependentWindowLevels() {
+        let detail = makeTransparentPanel(size: NSSize(width: 100, height: 100), role: .detail)
+        let orb = makeTransparentPanel(size: NSSize(width: 50, height: 50), role: .orb)
+
+        XCTAssertEqual(detail.level, .normal)
+        XCTAssertFalse(detail.isFloatingPanel)
+        XCTAssertEqual(orb.level, .floating)
+        XCTAssertTrue(orb.isFloatingPanel)
+    }
+
+    @MainActor
+    func testDetailAndOrbVisibilityAreIndependent() {
+        let delegate = AppDelegate()
+        defer {
+            delegate.hideDetail()
+            delegate.hideOrb()
+        }
+
+        delegate.showOrb()
+        delegate.showDetail()
+        XCTAssertEqual(delegate.detailPanel?.isVisible, true)
+        XCTAssertEqual(delegate.orbPanel?.isVisible, true)
+
+        delegate.hideDetail()
+        XCTAssertEqual(delegate.detailPanel?.isVisible, false)
+        XCTAssertEqual(delegate.orbPanel?.isVisible, true)
+
+        delegate.showDetail()
+        delegate.hideOrb()
+        XCTAssertEqual(delegate.detailPanel?.isVisible, true)
+        XCTAssertEqual(delegate.orbPanel?.isVisible, false)
+    }
+
+    @MainActor
+    func testInitialSurfacesShowOrbWithoutOpeningDetail() {
+        let delegate = AppDelegate()
+        defer { delegate.hideOrb() }
+
+        delegate.showInitialSurfaces()
+
+        XCTAssertEqual(delegate.orbPanel?.isVisible, true)
+        XCTAssertNotEqual(delegate.detailPanel?.isVisible, true)
+    }
+
+    func testOrbCloseTargetDoesNotRouteToDetail() {
+        XCTAssertEqual(orbAction(forCloseButton: false), .openDetail)
+        XCTAssertEqual(orbAction(forCloseButton: true), .closeOrb)
+    }
+
+    func testOrbCanvasLeavesRoomAroundTheCircle() {
+        XCTAssertEqual(orbDiameter, 74)
+        XCTAssertEqual(orbCanvasInset, 4)
+        XCTAssertEqual(orbCanvasSize, 82)
+    }
+
+    @MainActor
+    func testEnsureStatusPopoverCreatesAnimatedTransientPopoverIdempotently() {
+        let delegate = AppDelegate()
+        XCTAssertNil(delegate.statusPopover)
+
+        delegate.ensureStatusPopover()
+        let first = delegate.statusPopover
+        delegate.ensureStatusPopover()
+
+        XCTAssertNotNil(first)
+        XCTAssertTrue(first === delegate.statusPopover)
+        XCTAssertEqual(first?.behavior, .transient)
+        XCTAssertEqual(first?.animates, true)
+    }
+
+    @MainActor
+    func testPrewarmingCreatesStatusPopoverBeforeInteraction() {
+        let delegate = AppDelegate()
+
+        delegate.prewarmStatusPopover()
+
+        XCTAssertNotNil(delegate.statusPopover)
+    }
+
+    @MainActor
+    func testPreparingStatusPopoverWindowActivatesAppAndMakesWindowKey() {
+        let window = KeyTrackingWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 120),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        var didActivate = false
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+
+        prepareStatusPopoverWindow(window) {
+            didActivate = true
+            NSApp.activate(ignoringOtherApps: true)
+        }
+
+        XCTAssertTrue(didActivate)
+        XCTAssertTrue(window.didRequestKey)
+        XCTAssertEqual(window.level, .statusBar)
+        XCTAssertTrue(window.collectionBehavior.contains(.transient))
+    }
+
+    func testStatusPopoverExcludesUsageCharts() {
+        XCTAssertEqual(statusPopoverSections, [.quotaOverview, .detailsLink])
+    }
+
+    func testStatusPopoverHeaderOmitsPlanAndUsesSingleQuotaColumn() {
+        XCTAssertEqual(statusPopoverHeaderElements, [.syncStatus, .refresh])
+        XCTAssertEqual(statusPopoverQuotaColumnCount, 1)
+    }
+
+    @MainActor
+    func testPopoverUsesSharedSpacingAndIntrinsicContentHeight() {
+        XCTAssertEqual(SurfaceLayout.outerPadding, 16)
+        XCTAssertEqual(SurfaceLayout.sectionSpacing, 12)
+        XCTAssertEqual(SurfaceLayout.contentSpacing, 10)
+        XCTAssertEqual(SurfaceLayout.controlSize, 32)
+
+        let model = QuotaModel(fetchQuota: { self.snapshot(plan: "PLUS") }, fetchAnalytics: { nil })
+        model.snapshot = snapshot(plan: "PLUS")
+        let controller = NSHostingController(rootView: StatusPopoverView(model: model, openDetail: {}))
+        let expected = controller.sizeThatFits(in: CGSize(
+            width: SurfaceLayout.popoverWidth,
+            height: .greatestFiniteMagnitude
+        ))
+
+        let actual = statusPopoverContentSize(for: controller)
+
+        XCTAssertEqual(actual.width, SurfaceLayout.popoverWidth)
+        XCTAssertEqual(actual.height, ceil(expected.height))
+        XCTAssertGreaterThan(actual.height, SurfaceLayout.outerPadding * 2)
+    }
+
+    func testStatusPopoverDismissesForExternalActionsButNotRefresh() {
+        XCTAssertTrue(shouldCloseStatusPopover(for: .outsideClick))
+        XCTAssertTrue(shouldCloseStatusPopover(for: .escape))
+        XCTAssertTrue(shouldCloseStatusPopover(for: .applicationSwitch))
+        XCTAssertTrue(shouldCloseStatusPopover(for: .rightClick))
+        XCTAssertTrue(shouldCloseStatusPopover(for: .detailsAction))
+        XCTAssertFalse(shouldCloseStatusPopover(for: .internalRefresh))
+    }
+
+    @MainActor
     func testApplicationMenuRegistersCommandQQuitItem() {
         let app = NSApplication.shared
         let previousMenu = app.mainMenu
@@ -118,6 +271,20 @@ final class QuotaMenuBarTests: XCTestCase {
         await model.waitForRefreshForTesting()
 
         XCTAssertEqual(model.snapshot?.plan, "PRO")
+        XCTAssertFalse(model.isRefreshing)
+    }
+
+    @MainActor
+    func testPresentingPopoverOrDetailDoesNotRequestRefresh() async {
+        let controller = QuotaFetchController()
+        let model = QuotaModel(fetchQuota: { await controller.fetch() }, fetchAnalytics: { nil })
+
+        model.refresh(trigger: .popoverPresentation)
+        model.refresh(trigger: .detailPresentation)
+        for _ in 0..<20 { await Task.yield() }
+
+        let requestCount = await controller.count()
+        XCTAssertEqual(requestCount, 0)
         XCTAssertFalse(model.isRefreshing)
     }
 
