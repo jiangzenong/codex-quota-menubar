@@ -7,20 +7,46 @@ import QuotaCore
 // MARK: - Draggable NSHostingView
 
 private class DraggableHostingView<Content: View>: NSHostingView<Content> {
+    private let dragThreshold: CGFloat
+    private let onDragStateChange: (Bool) -> Void
     private var mouseDownScreen: NSPoint?
     private var windowStartOrigin: NSPoint?
     private var hasDragged = false
+
+    required init(rootView: Content) {
+        self.dragThreshold = 0
+        self.onDragStateChange = { _ in }
+        super.init(rootView: rootView)
+    }
+
+    init(rootView: Content, dragThreshold: CGFloat, onDragStateChange: @escaping (Bool) -> Void) {
+        self.dragThreshold = dragThreshold
+        self.onDragStateChange = onDragStateChange
+        super.init(rootView: rootView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     override func mouseDown(with event: NSEvent) {
         mouseDownScreen = NSEvent.mouseLocation
         windowStartOrigin = window?.frame.origin
         hasDragged = false
+        onDragStateChange(false)
         super.mouseDown(with: event)
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard let startOrigin = windowStartOrigin, let startScreen = mouseDownScreen else { super.mouseDragged(with: event); return }
+        if !hasDragged, dragThreshold > 0 {
+            let now = NSEvent.mouseLocation
+            let movement = NSPoint(x: now.x - startScreen.x, y: now.y - startScreen.y)
+            guard isOrbDragMovement(movement) else { return }
+        }
         hasDragged = true
+        onDragStateChange(true)
         let now = NSEvent.mouseLocation
         window?.setFrameOrigin(NSPoint(x: startOrigin.x + (now.x - startScreen.x),
                                        y: startOrigin.y + (now.y - startScreen.y)))
@@ -28,8 +54,15 @@ private class DraggableHostingView<Content: View>: NSHostingView<Content> {
 
     override func mouseUp(with event: NSEvent) {
         super.mouseUp(with: event)
+        onDragStateChange(false)
         mouseDownScreen = nil; windowStartOrigin = nil; hasDragged = false
     }
+}
+
+let orbDragThreshold: CGFloat = 6
+
+func isOrbDragMovement(_ movement: NSPoint) -> Bool {
+    movement.x * movement.x + movement.y * movement.y > orbDragThreshold * orbDragThreshold
 }
 
 // MARK: - Helpers
@@ -132,6 +165,7 @@ enum QuotaRefreshTrigger {
     @Published var snapshot: QuotaSnapshot?
     @Published var analytics: UsageAnalytics?
     @Published var isOrb = false
+    @Published var isOrbDragging = false
     @Published var isRefreshing = false
 
     private let fetchQuota: @MainActor () async -> QuotaSnapshot
@@ -425,6 +459,8 @@ enum QuotaRefreshTrigger {
                 case .openDetail: self?.showDetail()
                 case .closeOrb: self?.hideOrb()
                 }
+            }, dragThreshold: orbDragThreshold, onDragStateChange: { [weak self] isDragging in
+                self?.model.isOrbDragging = isDragging
             })
             host.wantsLayer = true; host.layer?.backgroundColor = CGColor.clear
             p.contentView = host
@@ -434,6 +470,7 @@ enum QuotaRefreshTrigger {
             }
         }
         model.isOrb = true
+        model.isOrbDragging = false
         orbPanel?.setFrameOrigin(origin)
         orbPanel?.makeKeyAndOrderFront(nil)
     }
@@ -455,6 +492,7 @@ enum QuotaRefreshTrigger {
         if let orb = orbPanel, orb.isVisible { orbOrigin = orb.frame.origin }
         orbPanel?.orderOut(nil)
         model.isOrb = false
+        model.isOrbDragging = false
     }
 
     @objc private func toggleOrb() {
