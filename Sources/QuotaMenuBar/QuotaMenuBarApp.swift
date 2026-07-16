@@ -9,6 +9,7 @@ import QuotaCore
 private class DraggableHostingView<Content: View>: NSHostingView<Content> {
     private let dragThreshold: CGFloat
     private let onDragStateChange: (Bool) -> Void
+    private let onRightMouseUp: ((NSEvent, NSView) -> Void)?
     private var mouseDownScreen: NSPoint?
     private var windowStartOrigin: NSPoint?
     private var hasDragged = false
@@ -16,12 +17,19 @@ private class DraggableHostingView<Content: View>: NSHostingView<Content> {
     required init(rootView: Content) {
         self.dragThreshold = 0
         self.onDragStateChange = { _ in }
+        self.onRightMouseUp = nil
         super.init(rootView: rootView)
     }
 
-    init(rootView: Content, dragThreshold: CGFloat, onDragStateChange: @escaping (Bool) -> Void) {
+    init(
+        rootView: Content,
+        dragThreshold: CGFloat,
+        onDragStateChange: @escaping (Bool) -> Void,
+        onRightMouseUp: ((NSEvent, NSView) -> Void)? = nil
+    ) {
         self.dragThreshold = dragThreshold
         self.onDragStateChange = onDragStateChange
+        self.onRightMouseUp = onRightMouseUp
         super.init(rootView: rootView)
     }
 
@@ -56,6 +64,10 @@ private class DraggableHostingView<Content: View>: NSHostingView<Content> {
         super.mouseUp(with: event)
         onDragStateChange(false)
         mouseDownScreen = nil; windowStartOrigin = nil; hasDragged = false
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        onRightMouseUp?(event, self)
     }
 }
 
@@ -136,6 +148,20 @@ private struct Loc {
         default: return key
         }
     }
+}
+
+@MainActor
+func makeOrbMenu(isZh: Bool, isDetailVisible: Bool) -> NSMenu {
+    let l = Loc(isZh)
+    let menu = NSMenu()
+    menu.addItem(withTitle: l.t("refreshNow"), action: #selector(AppDelegate.refresh), keyEquivalent: "")
+    menu.addItem(
+        withTitle: isDetailVisible ? l.t("hideWindow") : l.t("showWindow"),
+        action: #selector(AppDelegate.togglePanel),
+        keyEquivalent: ""
+    )
+    menu.addItem(withTitle: l.t("hideOrb"), action: #selector(AppDelegate.hideOrb), keyEquivalent: "")
+    return menu
 }
 
 // MARK: - App
@@ -304,7 +330,7 @@ enum QuotaRefreshTrigger {
         statusItem.menu = nil
     }
 
-    @objc private func refresh() { model.refresh(trigger: .manual) }
+    @objc func refresh() { model.refresh(trigger: .manual) }
 
     func ensureStatusPopover() {
         guard statusPopover == nil else { return }
@@ -416,7 +442,7 @@ enum QuotaRefreshTrigger {
 
     // MARK: - Panel Management
 
-    @objc private func togglePanel() {
+    @objc func togglePanel() {
         if detailPanel?.isVisible == true { hideDetail(); return }
         showDetail()
     }
@@ -456,11 +482,13 @@ enum QuotaRefreshTrigger {
             p.hasShadow = true
             let host = DraggableHostingView(rootView: FloatingBallView(model: model) { [weak self] action in
                 switch action {
-                case .openDetail: self?.showDetail()
+                case .toggleDetail: self?.togglePanel()
                 case .closeOrb: self?.hideOrb()
                 }
             }, dragThreshold: orbDragThreshold, onDragStateChange: { [weak self] isDragging in
                 self?.model.isOrbDragging = isDragging
+            }, onRightMouseUp: { [weak self] event, view in
+                self?.showOrbMenu(for: event, in: view)
             })
             host.wantsLayer = true; host.layer?.backgroundColor = CGColor.clear
             p.contentView = host
@@ -488,7 +516,7 @@ enum QuotaRefreshTrigger {
         showOrb()
     }
 
-    func hideOrb() {
+    @objc func hideOrb() {
         if let orb = orbPanel, orb.isVisible { orbOrigin = orb.frame.origin }
         orbPanel?.orderOut(nil)
         model.isOrb = false
@@ -498,6 +526,13 @@ enum QuotaRefreshTrigger {
     @objc private func toggleOrb() {
         if orbPanel?.isVisible == true { hideOrb() }
         else { showOrb() }
+    }
+
+    private func showOrbMenu(for event: NSEvent, in view: NSView) {
+        let isZh = (UserDefaults.standard.string(forKey: "appLocale") ?? "zh") == "zh"
+        let menu = makeOrbMenu(isZh: isZh, isDetailVisible: detailPanel?.isVisible == true)
+        menu.items.forEach { $0.target = self }
+        menu.popUp(positioning: nil, at: event.locationInWindow, in: view)
     }
 
     // MARK: - Actions
