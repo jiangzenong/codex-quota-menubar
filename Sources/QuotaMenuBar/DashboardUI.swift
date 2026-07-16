@@ -136,6 +136,20 @@ func orbTapAction(isDragging: Bool) -> OrbAction? {
     isDragging ? nil : .toggleDetail
 }
 
+func orbResetText(for window: QuotaWindow, now: Date = .now) -> String? {
+    guard let label = QuotaFormatting.periodLabel(for: window) else { return nil }
+    guard let reset = window.resetsAt else { return label }
+
+    let seconds = max(0, reset.timeIntervalSince(now))
+    let remaining: String
+    if seconds >= 86_400 {
+        remaining = "\(Int(seconds) / 86_400)d \(Int(seconds) % 86_400 / 3_600)h"
+    } else {
+        remaining = "\(Int(seconds) / 3_600)h \(Int(seconds) % 3_600 / 60)m"
+    }
+    return "\(label) · \(remaining)"
+}
+
 // MARK: - Water Wave (fills orb from bottom, surging surface)
 
 struct WaterWave: Shape {
@@ -189,9 +203,9 @@ struct FloatingBallView: View {
                         Text(window.map { QuotaFormatting.percentText($0.remainingPercent) } ?? "—")
                             .font(.system(size: 16, weight: .bold, design: .monospaced))
                             .foregroundStyle(colors.textPrimary).contentTransition(.numericText())
-                        if let window, let label = QuotaFormatting.periodLabel(for: window) {
-                            Text(label).font(.system(size: 8, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(colors.textSecondary)
+                        if let window, let text = orbResetText(for: window) {
+                            Text(text).font(.system(size: 8, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(Accent.orange)
                         }
                     }
                     Circle().stroke(Accent.orange, lineWidth: 2)

@@ -146,6 +146,17 @@ final class QuotaMenuBarTests: XCTestCase {
         XCTAssertEqual(orbCanvasSize, 68)
     }
 
+    func testOrbResetTextUsesActualWindowPeriodAndRemainingTime() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let weekly = QuotaWindow(id: "weekly", remainingPercent: 73, resetsAt: now.addingTimeInterval(221_400), duration: 604_800)
+        let fiveHour = QuotaWindow(id: "short", remainingPercent: 73, resetsAt: now.addingTimeInterval(4_800), duration: 18_000)
+        let unknownReset = QuotaWindow(id: "weekly", remainingPercent: 73, resetsAt: nil, duration: 604_800)
+
+        XCTAssertEqual(orbResetText(for: weekly, now: now), "7d · 2d 13h")
+        XCTAssertEqual(orbResetText(for: fiveHour, now: now), "5h · 1h 20m")
+        XCTAssertEqual(orbResetText(for: unknownReset, now: now), "7d")
+    }
+
     func testOrbDragStartsOnlyAfterMovementExceedsThreshold() {
         XCTAssertFalse(isOrbDragMovement(NSPoint(x: 4, y: 4)))
         XCTAssertFalse(isOrbDragMovement(NSPoint(x: orbDragThreshold, y: 0)))
