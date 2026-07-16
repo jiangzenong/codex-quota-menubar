@@ -138,9 +138,9 @@ final class QuotaCoreTests: XCTestCase {
         XCTAssertEqual(try QuotaAPI.parseUsage(Data(second.utf8)).windows.map(\.id), ["long"])
     }
 
-    func testStatusClicksRouteToPopoverAndContextMenu() {
+    func testStatusClicksRouteToPanelAndContextMenu() {
         XCTAssertEqual(StatusClickRoute.forRightMouseUp(true), .contextMenu)
-        XCTAssertEqual(StatusClickRoute.forRightMouseUp(false), .statusPopover)
+        XCTAssertEqual(StatusClickRoute.forRightMouseUp(false), .statusPanel)
     }
 
     func testParsesDesktopCreditsPerDay() throws {

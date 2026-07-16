@@ -85,29 +85,7 @@ enum SurfacePanelRole {
     case orb
 }
 
-enum StatusPopoverDismissTrigger: Equatable {
-    case outsideClick
-    case escape
-    case applicationSwitch
-    case rightClick
-    case detailsAction
-    case internalRefresh
-}
-
-func shouldCloseStatusPopover(for trigger: StatusPopoverDismissTrigger) -> Bool {
-    trigger != .internalRefresh
-}
-
-@MainActor
-func prepareStatusPopoverWindow(
-    _ window: NSWindow,
-    activateApplication: () -> Void = { NSApp.activate(ignoringOtherApps: true) }
-) {
-    activateApplication()
-    window.level = .statusBar
-    window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
-    window.makeKey()
-}
+let statusItemActionEvents: NSEvent.EventTypeMask = [.leftMouseUp, .rightMouseUp]
 
 @MainActor
 func makeTransparentPanel(size: NSSize, role: SurfacePanelRole) -> NSPanel {
@@ -176,13 +154,12 @@ enum QuotaRefreshTrigger {
     case applicationLaunch
     case timer
     case manual
-    case popoverPresentation
     case detailPresentation
 
     var requestsRefresh: Bool {
         switch self {
         case .applicationLaunch, .timer, .manual: true
-        case .popoverPresentation, .detailPresentation: false
+        case .detailPresentation: false
         }
     }
 }
@@ -236,16 +213,13 @@ enum QuotaRefreshTrigger {
     }
 }
 
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = QuotaModel()
     private var statusItem: NSStatusItem!
-    private(set) var statusPopover: NSPopover?
     var detailPanel: NSPanel?
     private(set) var orbPanel: NSPanel?
     private var subscriptions = Set<AnyCancellable>()
     private var refreshTimer: Timer?
-    private var statusPopoverEventMonitors: [Any] = []
-    private var statusPopoverActivationObserver: NSObjectProtocol?
 
     private let detailSize = NSSize(width: 512, height: 740)
     private let orbSize    = NSSize(width: orbCanvasSize, height: orbCanvasSize)
@@ -269,14 +243,12 @@ enum QuotaRefreshTrigger {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusClicked)
-        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        statusItem.button?.sendAction(on: statusItemActionEvents)
 
         model.$snapshot.receive(on: RunLoop.main).sink { [weak self] in
             self?.updateStatusTitle(for: $0)
-            self?.updateStatusPopoverSize()
         }.store(in: &subscriptions)
 
-        prewarmStatusPopover()
         showInitialSurfaces()
         startRefreshTimer()
         AppDelegate.refreshTimerDidChange = { [weak self] in self?.startRefreshTimer() }
@@ -309,9 +281,12 @@ enum QuotaRefreshTrigger {
     }
 
     @objc private func statusClicked() {
-        let route = StatusClickRoute.forRightMouseUp(NSApp.currentEvent?.type == .rightMouseUp)
-        if route == .statusPopover { toggleStatusPopover(); return }
-        if shouldCloseStatusPopover(for: .rightClick) { closeStatusPopover() }
+        let event = NSApp.currentEvent
+        let route = StatusClickRoute.forRightMouseUp(event?.type == .rightMouseUp)
+        if route == .statusPanel {
+            togglePanel()
+            return
+        }
         let isZh = (UserDefaults.standard.string(forKey: "appLocale") ?? "zh") == "zh"
         let l = Loc(isZh)
         let menu = NSMenu()
@@ -332,114 +307,6 @@ enum QuotaRefreshTrigger {
 
     @objc func refresh() { model.refresh(trigger: .manual) }
 
-    func ensureStatusPopover() {
-        guard statusPopover == nil else { return }
-        let popover = NSPopover()
-        popover.behavior = .transient
-        popover.animates = true
-        popover.delegate = self
-        let controller = NSHostingController(rootView: StatusPopoverView(
-            model: model,
-            openDetail: { [weak self] in
-                if shouldCloseStatusPopover(for: .detailsAction) { self?.closeStatusPopover() }
-                self?.showDetail()
-            }
-        ))
-        popover.contentViewController = controller
-        popover.contentSize = statusPopoverContentSize(for: controller)
-        statusPopover = popover
-    }
-
-    func prewarmStatusPopover() {
-        ensureStatusPopover()
-    }
-
-    private func toggleStatusPopover() {
-        ensureStatusPopover()
-        guard let popover = statusPopover else { return }
-        if popover.isShown {
-            closeStatusPopover()
-            return
-        }
-        guard let button = statusItem?.button else { return }
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        configureStatusPopoverWindow()
-        installStatusPopoverDismissalObservers()
-    }
-
-    private func configureStatusPopoverWindow() {
-        guard let window = statusPopover?.contentViewController?.view.window else { return }
-        prepareStatusPopoverWindow(window)
-    }
-
-    private func updateStatusPopoverSize() {
-        guard let controller = statusPopover?.contentViewController as? NSHostingController<StatusPopoverView> else { return }
-        statusPopover?.contentSize = statusPopoverContentSize(for: controller)
-    }
-
-    private func installStatusPopoverDismissalObservers() {
-        removeStatusPopoverDismissalObservers()
-
-        if let local = NSEvent.addLocalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown, .keyDown],
-            handler: { @MainActor [weak self] event in
-                guard let self, self.statusPopover?.isShown == true else { return event }
-                if event.type == .keyDown, event.keyCode == 53 {
-                    if shouldCloseStatusPopover(for: .escape) { self.closeStatusPopover() }
-                    return nil
-                }
-                let popoverWindow = self.statusPopover?.contentViewController?.view.window
-                let statusWindow = self.statusItem?.button?.window
-                if event.window !== popoverWindow, event.window !== statusWindow,
-                   shouldCloseStatusPopover(for: .outsideClick) {
-                    self.closeStatusPopover()
-                }
-                return event
-            }
-        ) {
-            statusPopoverEventMonitors.append(local)
-        }
-
-        if let global = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown],
-            handler: { @MainActor [weak self] _ in
-                if shouldCloseStatusPopover(for: .outsideClick) { self?.closeStatusPopover() }
-            }
-        ) {
-            statusPopoverEventMonitors.append(global)
-        }
-
-        statusPopoverActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            let processIdentifier = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier
-            guard processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
-            Task { @MainActor [weak self] in
-                if shouldCloseStatusPopover(for: .applicationSwitch) { self?.closeStatusPopover() }
-            }
-        }
-    }
-
-    private func removeStatusPopoverDismissalObservers() {
-        statusPopoverEventMonitors.forEach(NSEvent.removeMonitor)
-        statusPopoverEventMonitors.removeAll()
-        if let observer = statusPopoverActivationObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(observer)
-            statusPopoverActivationObserver = nil
-        }
-    }
-
-    private func closeStatusPopover() {
-        statusPopover?.performClose(nil)
-        removeStatusPopoverDismissalObservers()
-    }
-
-    func popoverDidClose(_ notification: Notification) {
-        removeStatusPopoverDismissalObservers()
-    }
-
     // MARK: - Panel Management
 
     @objc func togglePanel() {
@@ -451,6 +318,7 @@ enum QuotaRefreshTrigger {
         ensureDetailPanel()
         if let origin = detailOrigin { detailPanel?.setFrameOrigin(origin) }
         else { detailPanel?.center() }
+        detailOrigin = detailPanel?.frame.origin
         NSApp.activate(ignoringOtherApps: true)
         detailPanel?.makeKeyAndOrderFront(nil)
     }

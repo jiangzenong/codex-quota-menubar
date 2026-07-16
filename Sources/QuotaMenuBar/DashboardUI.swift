@@ -137,8 +137,7 @@ func orbTapAction(isDragging: Bool) -> OrbAction? {
 }
 
 func orbResetText(for window: QuotaWindow, now: Date = .now) -> String? {
-    guard let label = QuotaFormatting.periodLabel(for: window) else { return nil }
-    guard let reset = window.resetsAt else { return label }
+    guard let reset = window.resetsAt else { return nil }
 
     let seconds = max(0, reset.timeIntervalSince(now))
     let remaining: String
@@ -147,7 +146,7 @@ func orbResetText(for window: QuotaWindow, now: Date = .now) -> String? {
     } else {
         remaining = "\(Int(seconds) / 3_600)h \(Int(seconds) % 3_600 / 60)m"
     }
-    return "\(label)·\(remaining)"
+    return remaining
 }
 
 // MARK: - Water Wave (fills orb from bottom, surging surface)
@@ -185,6 +184,7 @@ struct FloatingBallView: View {
     private var colors: AppColors { .forTheme(theme) }
     private var window: QuotaWindow? { QuotaFormatting.preferredWindow(for: model.snapshot) }
     private var percent: Double { window?.remainingPercent ?? 0 }
+    private var periodLabel: String? { window.flatMap { QuotaFormatting.periodLabel(for: $0) } }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -202,7 +202,7 @@ struct FloatingBallView: View {
                     VStack(spacing: 0) {
                         Text(window.map { QuotaFormatting.percentText($0.remainingPercent) } ?? "—")
                             .font(.system(size: 18, weight: .bold, design: .monospaced))
-                            .foregroundStyle(colors.textPrimary).contentTransition(.numericText())
+                            .foregroundStyle(colors.textPrimary)
                         if let window, let text = orbResetText(for: window) {
                             Text(text).font(.system(size: 9, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(Accent.orange)
@@ -214,6 +214,18 @@ struct FloatingBallView: View {
             .contentShape(Circle())
             .onTapGesture {
                 if let action = orbTapAction(isDragging: model.isOrbDragging) { onAction(action) }
+            }
+
+            if let periodLabel {
+                Text(periodLabel)
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 5)
+                    .frame(height: 18)
+                    .background(Capsule().fill(Accent.orange))
+                    .overlay(Capsule().stroke(Color.white.opacity(0.28), lineWidth: 1))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(2)
             }
 
             if isHovered {

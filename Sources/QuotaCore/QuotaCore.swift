@@ -133,10 +133,10 @@ public enum QuotaFormatting {
 }
 
 public enum StatusClickRoute: Equatable {
-    case statusPopover
+    case statusPanel
     case contextMenu
 
     public static func forRightMouseUp(_ isRightMouseUp: Bool) -> Self {
-        isRightMouseUp ? .contextMenu : .statusPopover
+        isRightMouseUp ? .contextMenu : .statusPanel
     }
 }
