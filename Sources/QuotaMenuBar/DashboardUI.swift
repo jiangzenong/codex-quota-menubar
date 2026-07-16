@@ -132,6 +132,10 @@ func orbAction(forCloseButton: Bool) -> OrbAction {
     forCloseButton ? .closeOrb : .openDetail
 }
 
+func orbTapAction(isDragging: Bool) -> OrbAction? {
+    isDragging ? nil : .openDetail
+}
+
 // MARK: - Water Wave (fills orb from bottom, surging surface)
 
 struct WaterWave: Shape {
@@ -194,7 +198,9 @@ struct FloatingBallView: View {
                 }
             }
             .contentShape(Circle())
-            .onTapGesture { onAction(orbAction(forCloseButton: false)) }
+            .onTapGesture {
+                if let action = orbTapAction(isDragging: model.isOrbDragging) { onAction(action) }
+            }
 
             if isHovered {
                 Button {

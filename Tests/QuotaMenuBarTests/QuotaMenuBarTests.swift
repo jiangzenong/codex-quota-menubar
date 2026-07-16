@@ -133,6 +133,17 @@ final class QuotaMenuBarTests: XCTestCase {
         XCTAssertEqual(orbCanvasSize, 82)
     }
 
+    func testOrbDragStartsOnlyAfterMovementExceedsThreshold() {
+        XCTAssertFalse(isOrbDragMovement(NSPoint(x: 4, y: 4)))
+        XCTAssertFalse(isOrbDragMovement(NSPoint(x: orbDragThreshold, y: 0)))
+        XCTAssertTrue(isOrbDragMovement(NSPoint(x: orbDragThreshold + 0.1, y: 0)))
+    }
+
+    func testOrbTapDoesNotOpenDetailsWhileDragging() {
+        XCTAssertNil(orbTapAction(isDragging: true))
+        XCTAssertEqual(orbTapAction(isDragging: false), .openDetail)
+    }
+
     @MainActor
     func testEnsureStatusPopoverCreatesAnimatedTransientPopoverIdempotently() {
         let delegate = AppDelegate()
