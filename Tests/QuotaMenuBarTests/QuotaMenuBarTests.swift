@@ -120,7 +120,8 @@ final class QuotaMenuBarTests: XCTestCase {
         defer { delegate.hideDetail() }
 
         delegate.showDetail()
-        let expectedOrigin = NSPoint(x: 120, y: 240)
+        let initialOrigin = try! XCTUnwrap(delegate.detailPanel?.frame.origin)
+        let expectedOrigin = NSPoint(x: initialOrigin.x + 20, y: initialOrigin.y)
         delegate.detailPanel?.setFrameOrigin(expectedOrigin)
         delegate.hideDetail()
         delegate.showDetail()
