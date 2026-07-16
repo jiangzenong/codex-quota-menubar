@@ -71,7 +71,7 @@ On launch, the app reads your existing local Codex sign-in state and requests qu
 - Left-click the menu bar quota to open a compact popover with quota and reset information or a link to full details. It closes when you click elsewhere, switch apps, or press Esc.
 - Right-click it to refresh, show or hide the panel, toggle the floating orb, open Codex Usage, manage launch at login, or quit.
 - Use the panel header to refresh, change theme or language, independently show or hide the orb, or close the detail panel.
-- Click the orb to open or focus the detail panel without hiding the orb; hover over it to reveal its own close button.
+- Left-click the orb to open or close the detail panel. Right-click it to refresh, show or hide the detail panel, or hide the orb; hover over it to reveal its red close button.
 
 ## Privacy and security
 
@@ -89,7 +89,7 @@ swift test
 open dist/CodexQuotaMenuBar.app
 ```
 
-The app bundle is written to `dist/CodexQuotaMenuBar.app`. The script generates the icon, writes bundle metadata, and applies an ad-hoc signature.
+The app bundle is written to `dist/CodexQuotaMenuBar.app`. The script generates the icon, writes bundle metadata, and applies an ad-hoc signature. Unless `APP_VERSION` is set, it derives the version from the latest `v*` Git tag.
 
 ## Troubleshooting
 

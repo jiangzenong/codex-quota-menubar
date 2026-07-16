@@ -10,7 +10,7 @@
   <a href="https://github.com/jiangzenong/codex-quota-menubar/releases/latest"><img src="https://img.shields.io/github/v/release/jiangzenong/codex-quota-menubar?display_name=tag&style=flat-square" alt="最新版本"></a>
   <img src="https://img.shields.io/badge/macOS-15%2B-black?style=flat-square&logo=apple" alt="macOS 15+">
   <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6">
-  <a href="README_EN.md">English</a>
+  <a href="README_en.md">English</a>
 </p>
 
 <p align="center">
@@ -71,7 +71,7 @@
 - 左键菜单栏额度：展开紧凑的额度 Popover，可查看额度与重置时间或进入完整详情；点击外部区域、切换应用或按 Esc 会自动关闭。
 - 右键菜单栏额度：立即刷新、显示或隐藏面板、切换悬浮球、打开 Codex 用量页、设置开机启动或退出。
 - 面板右上角：刷新、切换主题、切换语言、独立显示或隐藏悬浮球，或关闭详情面板。
-- 悬浮球：点击可打开或聚焦详情面板，但不会隐藏悬浮球；鼠标移入后可通过关闭按钮单独隐藏。
+- 悬浮球：左键可打开或关闭详情面板，右键可立即刷新、显示或隐藏详情面板、隐藏悬浮球；鼠标移入后可通过红色关闭按钮单独隐藏。
 
 ## 隐私与安全
 
@@ -89,7 +89,7 @@ swift test
 open dist/CodexQuotaMenuBar.app
 ```
 
-构建产物位于 `dist/CodexQuotaMenuBar.app`。脚本会生成应用图标、写入 bundle 信息并执行 ad-hoc 签名。
+构建产物位于 `dist/CodexQuotaMenuBar.app`。脚本会生成应用图标、写入 bundle 信息并执行 ad-hoc 签名；未设置 `APP_VERSION` 时，会自动使用最新 `v*` Git 标签的版本号。
 
 ## 常见问题
 
