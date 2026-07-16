@@ -48,7 +48,7 @@ Before committing, run at least `swift test` and `git diff --check`. Run `./Scri
 
 ## Releases
 
-The release workflow runs for tags matching `v*`, builds Apple silicon and Intel artifacts, and publishes DMG and ZIP files. `Scripts/build-app.sh` derives its default bundle version from the latest reachable `v*` Git tag; pass `APP_VERSION` explicitly only when an override is required.
+The release workflow runs for tags matching `v*`, builds Apple silicon and Intel artifacts, and publishes DMG and ZIP files. Release tags must be created from `main`, and published `main` history must not be rewritten so tags cease to be ancestors. `Scripts/build-app.sh` derives its default bundle version from the latest reachable `v*` Git tag; pass `APP_VERSION` explicitly only when an override is required.
 
 This repository currently uses ad-hoc signing and does not claim Developer ID notarization. Keep README installation guidance accurate until signing or distribution changes are actually implemented.
 

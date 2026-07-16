@@ -89,7 +89,7 @@ swift test
 open dist/CodexQuotaMenuBar.app
 ```
 
-构建产物位于 `dist/CodexQuotaMenuBar.app`。脚本会生成应用图标、写入 bundle 信息并执行 ad-hoc 签名；未设置 `APP_VERSION` 时，会自动使用最新 `v*` Git 标签的版本号。
+构建产物位于 `dist/CodexQuotaMenuBar.app`。脚本会生成应用图标、写入 bundle 信息并执行 ad-hoc 签名；未设置 `APP_VERSION` 时，会自动使用当前提交可达的最新 `v*` Git 标签版本号。发布标签必须从 `main` 创建，并且不得通过改写已发布的 `main` 历史使标签脱离祖先链；否则本地构建无法推导版本号，应该先修复 Git 历史关系。
 
 ## 常见问题
 
