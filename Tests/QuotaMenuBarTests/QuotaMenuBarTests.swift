@@ -112,6 +112,19 @@ final class QuotaMenuBarTests: XCTestCase {
     }
 
     @MainActor
+    func testDetailToggleClosesAndReopensTheDetailPanel() {
+        let delegate = AppDelegate()
+        defer { delegate.hideDetail() }
+
+        delegate.showDetail()
+        delegate.togglePanel()
+        XCTAssertEqual(delegate.detailPanel?.isVisible, false)
+
+        delegate.togglePanel()
+        XCTAssertEqual(delegate.detailPanel?.isVisible, true)
+    }
+
+    @MainActor
     func testInitialSurfacesShowOrbWithoutOpeningDetail() {
         let delegate = AppDelegate()
         defer { delegate.hideOrb() }
@@ -123,14 +136,14 @@ final class QuotaMenuBarTests: XCTestCase {
     }
 
     func testOrbCloseTargetDoesNotRouteToDetail() {
-        XCTAssertEqual(orbAction(forCloseButton: false), .openDetail)
+        XCTAssertEqual(orbAction(forCloseButton: false), .toggleDetail)
         XCTAssertEqual(orbAction(forCloseButton: true), .closeOrb)
     }
 
     func testOrbCanvasLeavesRoomAroundTheCircle() {
-        XCTAssertEqual(orbDiameter, 74)
+        XCTAssertEqual(orbDiameter, 60)
         XCTAssertEqual(orbCanvasInset, 4)
-        XCTAssertEqual(orbCanvasSize, 82)
+        XCTAssertEqual(orbCanvasSize, 68)
     }
 
     func testOrbDragStartsOnlyAfterMovementExceedsThreshold() {
@@ -139,9 +152,21 @@ final class QuotaMenuBarTests: XCTestCase {
         XCTAssertTrue(isOrbDragMovement(NSPoint(x: orbDragThreshold + 0.1, y: 0)))
     }
 
-    func testOrbTapDoesNotOpenDetailsWhileDragging() {
+    func testOrbTapTogglesDetailsUnlessDragging() {
         XCTAssertNil(orbTapAction(isDragging: true))
-        XCTAssertEqual(orbTapAction(isDragging: false), .openDetail)
+        XCTAssertEqual(orbTapAction(isDragging: false), .toggleDetail)
+    }
+
+    @MainActor
+    func testOrbMenuContainsOnlyOrbActionsInCurrentLanguage() {
+        XCTAssertEqual(
+            makeOrbMenu(isZh: true, isDetailVisible: false).items.map(\.title),
+            ["立即刷新", "显示窗口", "隐藏悬浮球"]
+        )
+        XCTAssertEqual(
+            makeOrbMenu(isZh: false, isDetailVisible: true).items.map(\.title),
+            ["Refresh Now", "Hide Window", "Hide Orb"]
+        )
     }
 
     @MainActor

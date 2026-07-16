@@ -120,20 +120,20 @@ func modelChartHoverIndex(pointCount: Int, hoverX: CGFloat, width: CGFloat) -> I
 }
 
 enum OrbAction: Equatable {
-    case openDetail
+    case toggleDetail
     case closeOrb
 }
 
-let orbDiameter: CGFloat = 74
+let orbDiameter: CGFloat = 60
 let orbCanvasInset: CGFloat = 4
 let orbCanvasSize = orbDiameter + orbCanvasInset * 2
 
 func orbAction(forCloseButton: Bool) -> OrbAction {
-    forCloseButton ? .closeOrb : .openDetail
+    forCloseButton ? .closeOrb : .toggleDetail
 }
 
 func orbTapAction(isDragging: Bool) -> OrbAction? {
-    isDragging ? nil : .openDetail
+    isDragging ? nil : .toggleDetail
 }
 
 // MARK: - Water Wave (fills orb from bottom, surging surface)
@@ -187,10 +187,10 @@ struct FloatingBallView: View {
                         .clipShape(Circle())
                     VStack(spacing: 0) {
                         Text(window.map { QuotaFormatting.percentText($0.remainingPercent) } ?? "—")
-                            .font(.system(size: 19, weight: .bold, design: .monospaced))
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
                             .foregroundStyle(colors.textPrimary).contentTransition(.numericText())
                         if let window, let label = QuotaFormatting.periodLabel(for: window) {
-                            Text(label).font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            Text(label).font(.system(size: 8, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(colors.textSecondary)
                         }
                     }
@@ -207,10 +207,10 @@ struct FloatingBallView: View {
                     onAction(orbAction(forCloseButton: true))
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(.system(size: 7, weight: .bold))
                         .foregroundStyle(Color.white)
-                        .frame(width: 18, height: 18)
-                        .background(Circle().fill(Color.black.opacity(0.68)))
+                        .frame(width: 16, height: 16)
+                        .background(Circle().fill(Color.red))
                 }
                 .buttonStyle(.plain)
                 .help("Close Orb")
