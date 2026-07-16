@@ -89,7 +89,7 @@ swift test
 open dist/CodexQuotaMenuBar.app
 ```
 
-The app bundle is written to `dist/CodexQuotaMenuBar.app`. The script generates the icon, writes bundle metadata, and applies an ad-hoc signature. Unless `APP_VERSION` is set, it derives the version from the latest `v*` Git tag.
+The app bundle is written to `dist/CodexQuotaMenuBar.app`. The script generates the icon, writes bundle metadata, and applies an ad-hoc signature. Unless `APP_VERSION` is set, it derives the version from the latest reachable `v*` Git tag. Create release tags from `main` and do not rewrite published `main` history so tags leave its ancestor chain; otherwise local builds cannot derive a version and the Git history must be repaired first.
 
 ## Troubleshooting
 
