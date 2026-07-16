@@ -141,9 +141,9 @@ final class QuotaMenuBarTests: XCTestCase {
     }
 
     func testOrbCanvasLeavesRoomAroundTheCircle() {
-        XCTAssertEqual(orbDiameter, 60)
+        XCTAssertEqual(orbDiameter, 68)
         XCTAssertEqual(orbCanvasInset, 4)
-        XCTAssertEqual(orbCanvasSize, 68)
+        XCTAssertEqual(orbCanvasSize, 76)
     }
 
     func testOrbResetTextUsesActualWindowPeriodAndRemainingTime() {
@@ -152,8 +152,8 @@ final class QuotaMenuBarTests: XCTestCase {
         let fiveHour = QuotaWindow(id: "short", remainingPercent: 73, resetsAt: now.addingTimeInterval(4_800), duration: 18_000)
         let unknownReset = QuotaWindow(id: "weekly", remainingPercent: 73, resetsAt: nil, duration: 604_800)
 
-        XCTAssertEqual(orbResetText(for: weekly, now: now), "7d · 2d 13h")
-        XCTAssertEqual(orbResetText(for: fiveHour, now: now), "5h · 1h 20m")
+        XCTAssertEqual(orbResetText(for: weekly, now: now), "7d·2d 13h")
+        XCTAssertEqual(orbResetText(for: fiveHour, now: now), "5h·1h 20m")
         XCTAssertEqual(orbResetText(for: unknownReset, now: now), "7d")
     }
 

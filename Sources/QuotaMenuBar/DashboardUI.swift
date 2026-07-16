@@ -124,7 +124,7 @@ enum OrbAction: Equatable {
     case closeOrb
 }
 
-let orbDiameter: CGFloat = 60
+let orbDiameter: CGFloat = 68
 let orbCanvasInset: CGFloat = 4
 let orbCanvasSize = orbDiameter + orbCanvasInset * 2
 
@@ -147,7 +147,7 @@ func orbResetText(for window: QuotaWindow, now: Date = .now) -> String? {
     } else {
         remaining = "\(Int(seconds) / 3_600)h \(Int(seconds) % 3_600 / 60)m"
     }
-    return "\(label) · \(remaining)"
+    return "\(label)·\(remaining)"
 }
 
 // MARK: - Water Wave (fills orb from bottom, surging surface)
@@ -201,10 +201,10 @@ struct FloatingBallView: View {
                         .clipShape(Circle())
                     VStack(spacing: 0) {
                         Text(window.map { QuotaFormatting.percentText($0.remainingPercent) } ?? "—")
-                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .font(.system(size: 18, weight: .bold, design: .monospaced))
                             .foregroundStyle(colors.textPrimary).contentTransition(.numericText())
                         if let window, let text = orbResetText(for: window) {
-                            Text(text).font(.system(size: 8, weight: .semibold, design: .monospaced))
+                            Text(text).font(.system(size: 9, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(Accent.orange)
                         }
                     }
